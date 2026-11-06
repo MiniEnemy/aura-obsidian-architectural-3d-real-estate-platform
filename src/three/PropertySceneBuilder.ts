@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { MaterialsLibrary } from './MaterialsLibrary';
+import { addDriveway, addGround, buildPool, finalizeScene, organicCanopy } from './RealismKit';
 
 export interface SceneInteractiveNodes {
   frontDoorPivot: THREE.Group;
@@ -81,6 +82,8 @@ export class PropertySceneBuilder {
       );
     }
 
+    finalizeScene(root, furnitureGroup);
+
     return {
       frontDoorPivot,
       masterDoorPivot,
@@ -117,7 +120,6 @@ export class PropertySceneBuilder {
     const brass = MaterialsLibrary.get('champagne-bronze');
     const marble = MaterialsLibrary.get('calacatta-marble');
     const glowWarm = MaterialsLibrary.get('glow-warm');
-    const poolWater = MaterialsLibrary.get('water-pool');
     const lawn = MaterialsLibrary.get('lawn');
     for (let z = 12; z <= 20; z += 1.8) {
       const step = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.2), travertine);
@@ -134,33 +136,21 @@ export class PropertySceneBuilder {
       root.add(markerGlow);
     }
 
-    // 2. Infinity Swimming Pool (Vibrant Turquoise Water)
-    const poolBasin = new THREE.Mesh(
-      new THREE.BoxGeometry(18, 1.5, 7.5),
-      MaterialsLibrary.get('pool-tiles')
-    );
-    poolBasin.position.set(0, -0.75, -11.5);
-    root.add(poolBasin);
-
-    const water = new THREE.Mesh(new THREE.BoxGeometry(17.4, 0.1, 6.9), poolWater);
-    water.position.set(0, -0.1, -11.5);
-    root.add(water);
-
-    // White pool coping border
-    const copingNorth = new THREE.Mesh(new THREE.BoxGeometry(18.6, 0.15, 0.6), travertine);
-    copingNorth.position.set(0, 0.02, -15.4);
-    root.add(copingNorth);
+    // Open-top pool basin keeps the water visible; cut its footprint from the site lawn.
+    const pool = buildPool(root, { x: 0, z: -12.6, width: 17, depth: 5.4, infinityNorth: true });
+    addGround(root, [pool.hole]);
+    addDriveway(root, -8, 10, 32);
 
     // Sunken Fire Lounge with glowing embers
     const firePit = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 3.6), travertine);
-    firePit.position.set(10.5, 0.1, -9.5);
+    firePit.position.set(12.0, 0.1, -9.5);
     root.add(firePit);
 
     const fireEmbers = new THREE.Mesh(
       new THREE.CylinderGeometry(0.8, 0.8, 0.15, 16),
       glowWarm
     );
-    fireEmbers.position.set(10.5, 0.35, -9.5);
+    fireEmbers.position.set(12.0, 0.35, -9.5);
     root.add(fireEmbers);
 
     // 3. Interior Flooring (Warm Herringbone Wood Parquet)
@@ -630,27 +620,27 @@ export class PropertySceneBuilder {
     // Poolside Sun Loungers with Ivory Cushions & Umbrella
     for (let l = -4; l <= 4; l += 3.2) {
       const loungerBase = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.25, 2.1), woodSlats);
-      loungerBase.position.set(l, 0.12, -16.0);
+      loungerBase.position.set(l, 0.12, -17.6);
       furnitureGroup.add(loungerBase);
 
       const cushion = new THREE.Mesh(
         new THREE.BoxGeometry(0.8, 0.12, 2.0),
         MaterialsLibrary.get('fabric-ivory')
       );
-      cushion.position.set(l, 0.28, -16.0);
+      cushion.position.set(l, 0.28, -17.6);
       furnitureGroup.add(cushion);
     }
 
     // Modern Pool Umbrella
     const umbrellaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.0, 12), brass);
-    umbrellaPole.position.set(6.5, 1.5, -16.0);
+    umbrellaPole.position.set(6.5, 1.5, -17.6);
     furnitureGroup.add(umbrellaPole);
 
     const umbrellaCanopy = new THREE.Mesh(
       new THREE.ConeGeometry(1.8, 0.6, 8),
       MaterialsLibrary.get('fabric-ivory')
     );
-    umbrellaCanopy.position.set(6.5, 3.0, -16.0);
+    umbrellaCanopy.position.set(6.5, 3.0, -17.6);
     furnitureGroup.add(umbrellaCanopy);
 
     // 14. Rich Landscaping: Sculptural Lush Trees, Hedges, & Planter Beds
@@ -679,15 +669,15 @@ export class PropertySceneBuilder {
       const folMat2 = MaterialsLibrary.get('foliage-olive');
       const folMat3 = MaterialsLibrary.get('foliage-emerald');
 
-      const sphere1 = new THREE.Mesh(new THREE.SphereGeometry(1.6 * pos.scale, 16, 16), folMat1);
+      const sphere1 = organicCanopy(1.6 * pos.scale, folMat1, 1);
       sphere1.position.set(0, 3.8 * pos.scale, 0);
       foliageGroup.add(sphere1);
 
-      const sphere2 = new THREE.Mesh(new THREE.SphereGeometry(1.3 * pos.scale, 16, 16), folMat2);
+      const sphere2 = organicCanopy(1.3 * pos.scale, folMat2, 2);
       sphere2.position.set(0.6 * pos.scale, 4.5 * pos.scale, 0.4 * pos.scale);
       foliageGroup.add(sphere2);
 
-      const sphere3 = new THREE.Mesh(new THREE.SphereGeometry(1.2 * pos.scale, 16, 16), folMat3);
+      const sphere3 = organicCanopy(1.2 * pos.scale, folMat3, 3);
       sphere3.position.set(-0.5 * pos.scale, 4.3 * pos.scale, -0.4 * pos.scale);
       foliageGroup.add(sphere3);
 
@@ -765,9 +755,8 @@ export class PropertySceneBuilder {
     const bark = MaterialsLibrary.get('tree-bark');
     const brass = MaterialsLibrary.get('champagne-bronze');
     const glass = MaterialsLibrary.get('glass-facade');
-    const water = MaterialsLibrary.get('water-pool');
     const tile = new THREE.MeshStandardMaterial({ color: 0xb96348, roughness: 0.88 });
-    const seaMat = new THREE.MeshBasicMaterial({ color: 0x2e9db4 });
+    const seaMat = MaterialsLibrary.get('water-sea');
 
     // A limestone headland falls away toward the Cap d'Antibes coast.
     const ground = new THREE.Mesh(new THREE.BoxGeometry(44, 0.8, 36), limestone);
@@ -981,18 +970,7 @@ export class PropertySceneBuilder {
     }
 
     // The 25-metre mineral pool runs parallel to the Mediterranean horizon.
-    const poolRim = new THREE.Mesh(new THREE.BoxGeometry(27, 0.28, 7.6), limestone);
-    poolRim.position.set(0, 0.08, -12.6);
-    root.add(poolRim);
-    const poolBasin = new THREE.Mesh(new THREE.BoxGeometry(25, 0.36, 6.4), MaterialsLibrary.get('pool-tiles'));
-    poolBasin.position.set(0, -0.06, -12.6);
-    root.add(poolBasin);
-    const lapWater = new THREE.Mesh(new THREE.BoxGeometry(24.4, 0.08, 5.8), water);
-    lapWater.position.set(0, 0.18, -12.6);
-    root.add(lapWater);
-    const infinityLip = new THREE.Mesh(new THREE.BoxGeometry(24.6, 0.18, 0.16), brass);
-    infinityLip.position.set(0, 0.14, -16.3);
-    root.add(infinityLip);
+    buildPool(root, { x: 0, z: -12.6, width: 24.4, depth: 5.8, infinityNorth: true, topY: 0.32 });
 
     const sofaMat = MaterialsLibrary.get('fabric-sofa');
     const addBox = (parent: THREE.Group, size: [number, number, number], position: [number, number, number], material: THREE.Material) => {

@@ -8,6 +8,7 @@ import { PropertySceneBuilder, SceneInteractiveNodes } from '../../three/Propert
 import { SkyboxGenerator } from '../../three/SkyboxGenerator';
 import { AvatarFigure } from '../../three/AvatarFigure';
 import { MaterialsLibrary } from '../../three/MaterialsLibrary';
+import { configureRenderer, createPostFX, setupSkyAndSun } from '../../three/RealismKit';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, MousePointer, Move3d } from 'lucide-react';
 
 interface ThreeDViewerProps {
@@ -122,6 +123,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const skyboxRef = useRef<SkyboxGenerator | null>(null);
+  const postFXRef = useRef<ReturnType<typeof createPostFX> | null>(null);
   const nodesRef = useRef<SceneInteractiveNodes | null>(null);
   const modelRootRef = useRef<THREE.Group | null>(null);
   const avatarRef = useRef<AvatarFigure | null>(null);
@@ -188,13 +190,14 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 400);
     camera.position.set(14, 7.5, 25);
     camera.lookAt(0, 2.5, 0);
-    renderer.setSize(width, height, false);
     const modelRenderCap = activeProperty.model?.glbUrl ? 1.15 : 1.5;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = activeProperty.model?.glbUrl ? 0.95 : 1.2;
-    renderer.shadowMap.enabled = quality !== 'low';
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    const pixelRatio = Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85);
+    configureRenderer(renderer, {
+      pixelRatio,
+      exposure: activeProperty.model?.glbUrl ? 0.95 : 1.2,
+      shadows: quality !== 'low'
+    });
+    renderer.setSize(width, height, false);
     // The architecture and sun are static between control changes; refreshing a shadow map
     // on every first-person frame was doing far more GPU work than the scene needs.
     renderer.shadowMap.autoUpdate = false;
@@ -220,6 +223,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const skybox = new SkyboxGenerator(scene);
     skybox.setMode(lightingMode);
     skyboxRef.current = skybox;
+    const environment = setupSkyAndSun(renderer, scene, { background: false, fog: false, lighting: false });
     setLoadingProgress(42);
     setLoadingStatus('Building architectural surfaces');
     const nodes = activeProperty.model?.glbUrl
@@ -237,6 +241,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
         }
       : PropertySceneBuilder.buildProperty(activeProperty.id, scene);
     nodesRef.current = nodes;
+    const enableAO = quality === 'high' && window.innerWidth >= 1200 && (navigator.hardwareConcurrency ?? 4) >= 8 && !modelUrl;
+    let postFX: ReturnType<typeof createPostFX> | null = null;
+    try {
+      postFX = createPostFX(renderer, scene, camera, width, height, {
+        ao: enableAO,
+        bloom: quality !== 'low',
+        pixelRatio
+      });
+    } catch (error) {
+      console.warn('[ThreeDViewer] Post-processing unavailable; using direct rendering.', error);
+    }
+    postFXRef.current = postFX;
     const avatar = new AvatarFigure();
     avatar.visible = cameraModeRef.current === 'third-person';
     scene.add(avatar);
@@ -314,6 +330,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      postFXRef.current?.setSize(w, h);
     });
     resizeObserver.observe(container);
     const visibilityObserver = new IntersectionObserver(([entry]) => { visibleRef.current = entry.isIntersecting; }, { threshold: 0.01 });
@@ -322,11 +339,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     visibleRef.current = document.visibilityState === 'visible';
     document.addEventListener('visibilitychange', onVisibility);
     const timer = new THREE.Timer();
+    let waterFrameElapsed = 0;
+    const hasAnimatedWater = activeProperty.id === 'prop-obsidian-flagship' || activeProperty.id === 'prop-villa-solaria';
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
       if (!visibleRef.current || document.visibilityState === 'hidden') return;
       timer.update();
       const delta = Math.min(timer.getDelta(), 0.05);
+      waterFrameElapsed += delta;
+      if (hasAnimatedWater && waterFrameElapsed >= 1 / 20) {
+        waterFrameElapsed = 0;
+        renderNeededRef.current = true;
+      }
       const transition = transitionRef.current;
       const cameraIsAnimated = Boolean(transition) || performance.now() < animationUntilRef.current;
       let controlsChanged = false;
@@ -421,13 +445,21 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       fpsRef.current.frames += 1;
       fpsRef.current.elapsed += delta;
       if (fpsRef.current.elapsed > 2) {
-        if (fpsRef.current.frames / fpsRef.current.elapsed < 45 && !fpsRef.current.degraded) { fpsRef.current.degraded = true; renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.85)); renderer.shadowMap.enabled = false; }
+        if (fpsRef.current.frames / fpsRef.current.elapsed < 45 && !fpsRef.current.degraded) {
+          fpsRef.current.degraded = true;
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.85));
+          postFXRef.current?.setPixelRatio(Math.min(window.devicePixelRatio, 0.85));
+          postFXRef.current?.setAOEnabled(false);
+          renderer.shadowMap.enabled = false;
+        }
         fpsRef.current.frames = 0;
         fpsRef.current.elapsed = 0;
       }
       if (cameraModeRef.current !== 'orbit' || controlsChanged || cameraIsAnimated || renderNeededRef.current) {
         onCameraMove?.(camera.position.x, camera.position.z, camera.rotation.y);
-        renderer.render(scene, camera);
+        MaterialsLibrary.update(timer.getElapsed());
+        if (postFXRef.current) postFXRef.current.render();
+        else renderer.render(scene, camera);
         renderNeededRef.current = false;
       }
     };
@@ -443,7 +475,11 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       controls.removeEventListener('change', onControlsChange);
       controls.dispose();
+      postFXRef.current?.dispose();
+      postFXRef.current = null;
       disposeObject(scene);
+      MaterialsLibrary.dispose();
+      environment.dispose();
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
@@ -463,7 +499,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const renderer = rendererRef.current;
     if (!renderer) return;
     const modelRenderCap = activeProperty.model?.glbUrl ? 1.15 : 1.5;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85));
+    const ratio = Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85);
+    renderer.setPixelRatio(ratio);
+    postFXRef.current?.setPixelRatio(ratio);
+    postFXRef.current?.setAOEnabled(quality === 'high' && window.innerWidth >= 1200 && (navigator.hardwareConcurrency ?? 4) >= 8 && !activeProperty.model?.glbUrl);
     renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.needsUpdate = true;
   }, [quality]);
