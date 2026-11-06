@@ -128,6 +128,11 @@ export const ViewerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setCameraMode('orbit');
       setIsTourPlaying(false);
       setCurrentTourStopIndex(0);
+      setDoorsOpenState({ 'obj-front-door': false, 'obj-master-door': false });
+      setLightsOnState({ 'obj-living-lights': true, 'obj-dining-chandelier': true });
+      setCurtainsOpenState({ 'obj-master-curtains': true });
+      setSelectedObject(null);
+      setActiveMeasurementPoints([]);
       setTargetCameraPosition({ x: 14, y: 7.5, z: 25 });
       setTargetCameraLookAt({ x: 0, y: 2.5, z: 0 });
     }

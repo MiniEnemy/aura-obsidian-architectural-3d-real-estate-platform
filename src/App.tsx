@@ -46,11 +46,11 @@ const MainAppContent: React.FC = () => {
     const handleHash = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash.startsWith('property/')) {
-        const slug = hash.replace('property/', '');
+        const [, slug, destination] = hash.split('/');
         const match = properties.find((p) => p.slug === slug || p.id === slug);
         if (match) {
           setActivePropertyById(match.id);
-          setCurrentView('detail');
+          setCurrentView(destination === '3d' ? 'viewer' : 'detail');
         } else {
           setCurrentView('properties');
         }
@@ -73,7 +73,7 @@ const MainAppContent: React.FC = () => {
   const handleEnter3D = (prop: Property, roomId?: string) => {
     setActivePropertyById(prop.id);
     setCurrentView('viewer');
-    window.location.hash = 'viewer';
+    window.location.hash = `property/${prop.slug}/3d`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (roomId) {
@@ -98,7 +98,8 @@ const MainAppContent: React.FC = () => {
     setCurrentView(view);
     if (view === 'home') window.location.hash = '';
     else if (view === 'properties') window.location.hash = 'properties';
-    else if (view === 'viewer') window.location.hash = 'viewer';
+    else if (view === 'viewer') window.location.hash = `property/${activeProperty.slug}/3d`;
+    else if (view === 'detail') window.location.hash = `property/${activeProperty.slug}`;
     else if (view === 'compare') window.location.hash = 'compare';
     else if (view === 'saved') window.location.hash = 'saved';
     window.scrollTo({ top: 0, behavior: 'smooth' });
