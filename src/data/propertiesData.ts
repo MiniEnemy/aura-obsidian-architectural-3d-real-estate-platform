@@ -451,6 +451,8 @@ export const PROPERTIES: Property[] = [
     energyRating: 'A',
     features: [
       '25m Heated Mineral Lap Pool',
+      'Limestone Entry Court with Interactive Pivot Door',
+      'Aromatic Mediterranean Garden and Olive-Courtyard Planting',
       'Central Courtyard with Century-Old Olive Tree',
       'Sunken Outdoor Fire Lounge',
       'Temperature-Controlled 600-Bottle Wine Cave',
@@ -500,6 +502,17 @@ export const PROPERTIES: Property[] = [
         label: 'Pavilion Level',
         elevation: 0,
         rooms: [
+          {
+            id: 'room-villa-entry',
+            name: 'Garden Entry Court',
+            floorId: 'floor-main-villa',
+            areaSqm: 32,
+            dimensions: '8.0m x 4.0m',
+            cameraPosition: { x: 0, y: 1.8, z: 12.0 },
+            cameraTarget: { x: 0, y: 1.6, z: 8.1 },
+            description: 'Limestone arrival path leads through aromatic planting beds to the covered white oak pivot entrance.',
+            features: ['Interactive Pivot Entry Door', 'Mediterranean Herb Beds', 'Stepped Limestone Threshold']
+          },
           {
             id: 'room-villa-living',
             name: 'Sunken Sea Lounge',
@@ -601,10 +614,10 @@ export const PROPERTIES: Property[] = [
     energyRating: 'A+',
     features: [
       '72nd Floor Panoramic Corner Glazing',
-      'Private High-Speed Key-Coded Elevator Vestibule',
+      'Private Elevator Vestibule with Interactive Oak Entry Door',
       'Double-Height 7.5m Great Room',
       'Custom Boffi Monolith Kitchen in Calacatta Gold',
-      'Private Heated Open Sky Loggia Terrace',
+      'Private Planted Sky Garden with Olive Tree and Open-Sky Loggia',
       '24/7 White-Glove Concierge & Valet Service'
     ],
     description:
@@ -712,6 +725,17 @@ export const PROPERTIES: Property[] = [
             cameraTarget: { x: 6.1, y: 5.35, z: 6.25 },
             description: 'Quiet upper guest room with layered linen bedding and a private bath.',
             features: ['Queen Platform Bed', 'Private Ensuite', 'Motorized Shades']
+          },
+          {
+            id: 'room-sky-garden',
+            name: 'Private Sky Garden Loggia',
+            floorId: 'floor-sky-73',
+            areaSqm: 48,
+            dimensions: '14.0m x 3.4m',
+            cameraPosition: { x: 3.0, y: 5.8, z: 8.5 },
+            cameraTarget: { x: 7.0, y: 5.0, z: 10.3 },
+            description: 'Open-air upper terrace with a planted olive tree, raised garden beds and a clear skyline-facing walk lane.',
+            features: ['Private Planted Terrace', 'Olive Tree and Herb Planters', 'Panoramic Skyline View']
           }
         ]
       }

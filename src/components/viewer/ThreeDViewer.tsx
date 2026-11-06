@@ -72,7 +72,9 @@ const getObsidianGroundHeight = (x: number, z: number, previousGround: number) =
   return 0;
 };
 
-const isSkyMezzanine = (x: number, z: number) => x >= -10.6 && x <= 10.6 && z >= 0.72 && z <= 8.25;
+const isSkyMezzanine = (x: number, z: number) =>
+  (x >= -10.6 && x <= 10.6 && z >= 0.72 && z <= 8.25) ||
+  (x >= -3.6 && x <= 10.6 && z > 8.25 && z <= 11.4);
 
 const getSkyGroundHeight = (x: number, z: number, previousGround: number) => {
   // The modeled floating oak stair rises along the west side of the great room.
@@ -352,8 +354,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
         const movement = vectors.movement.copy(state.velocity).multiplyScalar(delta);
         const radius = 0.34;
         const previousGround = Math.max(state.position.y - 1.6, 0);
-        const nextX = THREE.MathUtils.clamp(state.position.x + movement.x, -10.2 + radius, 10.2 - radius);
-        const nextZ = THREE.MathUtils.clamp(state.position.z + movement.z, -8.05 + radius, 8.85 - radius);
+        const isVillaWalk = activeProperty.id === 'prop-villa-solaria';
+        const isSkyWalk = activeProperty.id === 'prop-sky-residence';
+        const nextX = THREE.MathUtils.clamp(
+          state.position.x + movement.x,
+          (isVillaWalk ? -21.2 : -10.2) + radius,
+          (isVillaWalk ? 21.2 : 10.2) - radius
+        );
+        const nextZ = THREE.MathUtils.clamp(
+          state.position.z + movement.z,
+          (isVillaWalk ? -17.4 : -8.05) + radius,
+          (isVillaWalk ? 17.2 : isSkyWalk ? 11.4 : 8.85) - radius
+        );
         const getGroundAt = (x: number, z: number) => {
           if (activeProperty.id === 'prop-obsidian-flagship') return getObsidianGroundHeight(x, z, previousGround);
           if (activeProperty.id === 'prop-sky-residence') return getSkyGroundHeight(x, z, previousGround);

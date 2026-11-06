@@ -66,9 +66,9 @@ export class PropertySceneBuilder {
     root.add(diningLightGlow);
 
     if (propertyId === 'prop-villa-solaria') {
-      this.buildVillaLumina(root, furnitureGroup, interactiveObjects);
+      this.buildVillaLumina(root, furnitureGroup, interactiveObjects, frontDoorPivot);
     } else if (propertyId === 'prop-sky-residence') {
-      this.buildSkySanctuary(root, furnitureGroup, interactiveObjects);
+      this.buildSkySanctuary(root, furnitureGroup, interactiveObjects, frontDoorPivot);
     } else {
       this.buildObsidianPavilion(
         root,
@@ -751,7 +751,8 @@ export class PropertySceneBuilder {
   private static buildVillaLumina(
     root: THREE.Group,
     furnitureGroup: THREE.Group,
-    interactiveObjects: THREE.Object3D[]
+    interactiveObjects: THREE.Object3D[],
+    frontDoorPivot: THREE.Group
   ) {
     const limestone = MaterialsLibrary.get('travertine');
     const plaster = MaterialsLibrary.get('stucco-white');
@@ -840,6 +841,60 @@ export class PropertySceneBuilder {
       const arch = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.12, 10, 24, Math.PI), plaster);
       arch.position.set(x, 2.65, 8.1);
       root.add(arch);
+    }
+
+    // A legible, usable arrival: the central opening becomes the front door and path.
+    frontDoorPivot.position.set(-0.95, 0, 8.52);
+    const villaDoor = new THREE.Mesh(new THREE.BoxGeometry(1.9, 3.25, 0.16), walnut);
+    villaDoor.position.set(0.95, 1.65, 0);
+    villaDoor.userData = {
+      id: 'obj-front-door', name: 'Villa Lumina Pivot Entry', type: 'door',
+      description: 'Open the white oak pivot door beneath the covered Mediterranean loggia.'
+    };
+    interactiveObjects.push(villaDoor);
+    frontDoorPivot.add(villaDoor);
+    const villaDoorHandle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.25, 0.11), brass);
+    villaDoorHandle.position.set(1.62, 1.65, 0.1);
+    frontDoorPivot.add(villaDoorHandle);
+    for (const x of [-1.08, 1.08]) {
+      const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.45, 0.22), limestone);
+      jamb.position.set(x, 1.72, 8.52);
+      root.add(jamb);
+    }
+    const entryHeader = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.22, 0.24), limestone);
+    entryHeader.position.set(0, 3.46, 8.52);
+    root.add(entryHeader);
+    for (let step = 0; step < 4; step++) {
+      const entryStep = new THREE.Mesh(new THREE.BoxGeometry(2.65 + step * 0.25, 0.12, 0.48), limestone);
+      entryStep.position.set(0, 0.18 - step * 0.1, 8.85 + step * 0.46);
+      entryStep.receiveShadow = true;
+      root.add(entryStep);
+    }
+    const approach = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, 4.2), limestone);
+    approach.position.set(0, -0.12, 12.0);
+    root.add(approach);
+
+    // Aromatic planting beds and low path lights frame the front walk without closing it.
+    const gardenSoil = new THREE.MeshStandardMaterial({ color: 0x433728, roughness: 1 });
+    const lavender = new THREE.MeshStandardMaterial({ color: 0x8173a6, roughness: 0.9 });
+    for (const side of [-1, 1]) {
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.18, 6.2), gardenSoil);
+      bed.position.set(side * 4.0, 0.08, 12.0);
+      root.add(bed);
+      for (let row = 0; row < 3; row++) {
+        for (let column = 0; column < 5; column++) {
+          const shrub = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), column % 2 ? greenery : lavender);
+          shrub.position.set(side * (2.9 + column * 0.48), 0.38, 9.8 + row * 1.65);
+          shrub.scale.set(1.0, 0.72, 0.9);
+          shrub.castShadow = true;
+          root.add(shrub);
+        }
+      }
+      for (const z of [10.0, 12.0, 14.0]) {
+        const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.38, 12), brass);
+        bollard.position.set(side * 1.75, 0.19, z);
+        root.add(bollard);
+      }
     }
 
     // The 25-metre mineral pool runs parallel to the Mediterranean horizon.
@@ -1090,7 +1145,8 @@ export class PropertySceneBuilder {
   private static buildSkySanctuary(
     root: THREE.Group,
     furnitureGroup: THREE.Group,
-    interactiveObjects: THREE.Object3D[]
+    interactiveObjects: THREE.Object3D[],
+    frontDoorPivot: THREE.Group
   ) {
     const oak = MaterialsLibrary.get('parquet-oak');
     const marble = MaterialsLibrary.get('calacatta-marble');
@@ -1194,12 +1250,30 @@ export class PropertySceneBuilder {
     stairGuard.rotation.x = 0.34;
     root.add(stairGuard);
 
-    // Elevator entry vestibule and stone reception console.
-    const vestibuleWall = addBox(root, [3.8, 3.2, 0.24], [-7.8, 1.65, 7.5], plaster);
-    vestibuleWall.name = 'Private elevator vestibule';
-    const elevatorDoor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.7, 0.08), bronze);
-    elevatorDoor.position.set(-7.8, 1.5, 7.34);
-    root.add(elevatorDoor);
+    // Private elevator arrival with a framed, interactive oak-and-bronze entry door.
+    addBox(root, [1.05, 3.2, 0.24], [-9.175, 1.65, 7.5], plaster);
+    addBox(root, [1.05, 3.2, 0.24], [-6.425, 1.65, 7.5], plaster);
+    addBox(root, [1.7, 0.5, 0.24], [-7.8, 2.95, 7.5], plaster);
+    for (const x of [-8.72, -6.88]) {
+      const entryJamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.82, 0.14), brass);
+      entryJamb.position.set(x, 1.42, 7.4);
+      root.add(entryJamb);
+    }
+    const entryHeader = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.09, 0.14), brass);
+    entryHeader.position.set(-7.8, 2.9, 7.4);
+    root.add(entryHeader);
+    frontDoorPivot.position.set(-8.65, 0, 7.34);
+    const penthouseDoor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.72, 0.1), oak);
+    penthouseDoor.position.set(0.85, 1.38, 0);
+    penthouseDoor.userData = {
+      id: 'obj-front-door', name: 'Sky Sanctuary Private Entry', type: 'door',
+      description: 'Open the white oak and bronze entrance from the private elevator vestibule.'
+    };
+    interactiveObjects.push(penthouseDoor);
+    frontDoorPivot.add(penthouseDoor);
+    const penthousePull = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.1, 0.09), brass);
+    penthousePull.position.set(1.45, 1.42, 0.08);
+    frontDoorPivot.add(penthousePull);
     addBox(furnitureGroup, [2.1, 0.82, 0.62], [-5.3, 0.43, 6.25], marble);
     addBox(furnitureGroup, [0.08, 1.5, 1.2], [-10.45, 1.7, 0.6], bronze);
 
@@ -1267,8 +1341,11 @@ export class PropertySceneBuilder {
     shower.position.set(-10.0, 5.15, 3.0);
     root.add(shower);
 
-    // Private south-facing loggia with planters and a slim bronze rail.
+    // Private south-facing loggia becomes a planted sky garden with a clear walk lane.
     addBox(root, [14.0, 0.26, 3.4], [3.5, 3.82, 9.9], oak, false);
+    const gardenStrip = new THREE.Mesh(new THREE.BoxGeometry(12.8, 0.12, 1.85), MaterialsLibrary.get('lawn'));
+    gardenStrip.position.set(3.5, 3.98, 10.25);
+    root.add(gardenStrip);
     const balconyRail = new THREE.Mesh(new THREE.BoxGeometry(14.0, 1.05, 0.06), railingGlass);
     balconyRail.position.set(3.5, 4.48, 11.58);
     root.add(balconyRail);
@@ -1277,9 +1354,28 @@ export class PropertySceneBuilder {
       const planter = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.52, 0.56), plaster);
       planter.position.set(x, 4.2, 10.45);
       root.add(planter);
-      const plant = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), MaterialsLibrary.get('foliage-emerald'));
-      plant.position.set(x, 4.75, 10.45);
+      const soil = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.08, 0.42), MaterialsLibrary.get('tree-bark'));
+      soil.position.set(x, 4.5, 10.45);
+      root.add(soil);
+      const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.46, 1), MaterialsLibrary.get('foliage-emerald'));
+      plant.position.set(x, 4.88, 10.45);
+      plant.scale.set(1.0, 0.85, 0.92);
+      plant.castShadow = true;
       root.add(plant);
+    }
+    const skyOliveTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 1.7, 12), MaterialsLibrary.get('tree-bark'));
+    skyOliveTrunk.position.set(9.1, 4.9, 9.25);
+    root.add(skyOliveTrunk);
+    const skyOliveCanopy = new THREE.Mesh(new THREE.IcosahedronGeometry(0.82, 2), MaterialsLibrary.get('foliage-olive'));
+    skyOliveCanopy.position.set(9.1, 5.85, 9.25);
+    skyOliveCanopy.scale.set(1.0, 0.82, 0.95);
+    skyOliveCanopy.castShadow = true;
+    root.add(skyOliveCanopy);
+    for (const x of [-1.0, 3.0, 7.0]) {
+      const herb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), MaterialsLibrary.get('foliage-emerald'));
+      herb.position.set(x, 4.42, 9.5);
+      herb.scale.set(1.5, 0.65, 1.0);
+      root.add(herb);
     }
 
     // Central Park is a recognizable green opening among Midtown towers.
