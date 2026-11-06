@@ -66,7 +66,7 @@ export class PropertySceneBuilder {
     root.add(diningLightGlow);
 
     if (propertyId === 'prop-villa-solaria') {
-      this.buildVillaLumina(root, furnitureGroup, interactiveObjects, frontDoorPivot);
+      this.buildVillaLumina(root, furnitureGroup, interactiveObjects, frontDoorPivot, masterDoorPivot);
     } else if (propertyId === 'prop-sky-residence') {
       this.buildSkySanctuary(root, furnitureGroup, interactiveObjects, frontDoorPivot);
     } else {
@@ -752,7 +752,8 @@ export class PropertySceneBuilder {
     root: THREE.Group,
     furnitureGroup: THREE.Group,
     interactiveObjects: THREE.Object3D[],
-    frontDoorPivot: THREE.Group
+    frontDoorPivot: THREE.Group,
+    guestDoorPivot: THREE.Group
   ) {
     const limestone = MaterialsLibrary.get('travertine');
     const plaster = MaterialsLibrary.get('stucco-white');
@@ -802,7 +803,10 @@ export class PropertySceneBuilder {
       root.add(wall);
     };
     // Bedroom wings turn around the open courtyard; the sea side stays glazed.
-    wingWall(-11.8, 0.6, 0.35, 16.5);
+    for (const [z, depth] of [[-7.14, 1.02], [-3.6, 1.15], [0.15, 1.45], [3.9, 1.15], [7.89, 1.92]] as const) {
+      wingWall(-11.8, z, 0.35, depth);
+      wingWall(11.8, z, 0.35, depth);
+    }
     wingWall(-7.6, -7.5, 8.7, 0.35);
     wingWall(-7.6, 8.7, 8.7, 0.35);
     wingWall(11.8, 0.6, 0.35, 16.5);
@@ -820,18 +824,88 @@ export class PropertySceneBuilder {
       root.add(jamb);
     }
 
-    // Separate terracotta roof planes keep the courtyard open to the sky.
-    for (const x of [-8.2, 8.2]) {
-      const roofDeck = new THREE.Mesh(new THREE.BoxGeometry(7.1, 0.38, 18.0), tile);
-      roofDeck.position.set(x, 4.15, 0.65);
-      roofDeck.castShadow = true;
-      root.add(roofDeck);
-      for (let z = -7.7; z <= 8.0; z += 0.75) {
-        const eave = new THREE.Mesh(new THREE.BoxGeometry(7.15, 0.07, 0.05), brass);
-        eave.position.set(x, 3.92, z);
-        root.add(eave);
+    // Low, pitched Provençal roof: paired gables, deep eaves and visible terracotta courses.
+    const roofCourses = new THREE.InstancedMesh(new THREE.BoxGeometry(4.53, 0.055, 0.58), tile, 112);
+    const roofCourseTransform = new THREE.Object3D();
+    let roofCourseIndex = 0;
+    for (const wingCenter of [-7.6, 7.7]) {
+      const gableShape = new THREE.Shape();
+      gableShape.moveTo(-4.2, 0);
+      gableShape.lineTo(4.2, 0);
+      gableShape.lineTo(0, 1.55);
+      gableShape.closePath();
+      const gable = new THREE.Mesh(
+        new THREE.ShapeGeometry(gableShape),
+        new THREE.MeshStandardMaterial({ color: 0xd8caba, roughness: 0.94, side: THREE.DoubleSide })
+      );
+      gable.position.set(wingCenter, 3.72, 8.55);
+      root.add(gable);
+      const rearGable = gable.clone();
+      rearGable.position.z = -7.55;
+      rearGable.rotation.y = Math.PI;
+      root.add(rearGable);
+
+      for (const side of [-1, 1]) {
+        const angle = side < 0 ? 0.36 : -0.36;
+        const slopeCenterX = wingCenter + side * 2.12;
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.2, 18.4), tile);
+        roof.position.set(slopeCenterX, 4.68, 0.58);
+        roof.rotation.z = angle;
+        roof.castShadow = true;
+        root.add(roof);
+        for (let z = -8.1; z <= 8.8; z += 0.62) {
+          roofCourseTransform.position.set(slopeCenterX, 4.7, z);
+          roofCourseTransform.rotation.set(0, 0, angle);
+          roofCourseTransform.updateMatrix();
+          roofCourses.setMatrixAt(roofCourseIndex++, roofCourseTransform.matrix);
+        }
+        const fascia = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 18.5), limestone);
+        fascia.position.set(wingCenter + side * 4.12, 3.94, 0.58);
+        root.add(fascia);
+      }
+      const ridge = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 18.7, 12), tile);
+      ridge.rotation.x = Math.PI / 2;
+      ridge.position.set(wingCenter, 5.48, 0.58);
+      root.add(ridge);
+    }
+    roofCourses.count = roofCourseIndex;
+    roofCourses.instanceMatrix.needsUpdate = true;
+    root.add(roofCourses);
+
+    // Deep-set side windows are real openings with sills, lintels and working-looking shutters.
+    const shutter = new THREE.MeshStandardMaterial({ color: 0x394a3c, roughness: 0.76 });
+    const shutterLouvers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.13, 0.045, 0.43), walnut, 112);
+    const louverTransform = new THREE.Object3D();
+    let louverIndex = 0;
+    for (const side of [-1, 1]) {
+      for (const z of [-5.4, -1.8, 2.1, 5.7]) {
+        const reveal = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.1, 2.45), glass);
+        reveal.position.set(side * 11.8, 2.05, z);
+        root.add(reveal);
+        const sillWall = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.98, 2.45), plaster);
+        sillWall.position.set(side * 11.8, 0.49, z);
+        root.add(sillWall);
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.88, 2.45), plaster);
+        lintel.position.set(side * 11.8, 3.56, z);
+        root.add(lintel);
+        for (const offset of [-1.48, 1.48]) {
+          const shutterPanel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.95, 0.5), shutter);
+          shutterPanel.position.set(side * 12.0, 2.05, z + offset);
+          root.add(shutterPanel);
+          for (let slat = 0; slat < 7; slat++) {
+            louverTransform.position.set(side * 12.08, 1.34 + slat * 0.22, z + offset);
+            louverTransform.updateMatrix();
+            shutterLouvers.setMatrixAt(louverIndex++, louverTransform.matrix);
+          }
+        }
+        const sill = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 2.7), limestone);
+        sill.position.set(side * 11.93, 0.98, z);
+        root.add(sill);
       }
     }
+    shutterLouvers.count = louverIndex;
+    shutterLouvers.instanceMatrix.needsUpdate = true;
+    root.add(shutterLouvers);
     // Covered loggia arches facing the garden and sea.
     for (let x = -10; x <= 10; x += 4) {
       const column = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 3.5, 20), plaster);
@@ -864,6 +938,15 @@ export class PropertySceneBuilder {
     const entryHeader = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.22, 0.24), limestone);
     entryHeader.position.set(0, 3.46, 8.52);
     root.add(entryHeader);
+    for (const x of [-1.62, 1.62]) {
+      const porticoColumn = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 3.15, 18), plaster);
+      porticoColumn.position.set(x, 1.75, 9.0);
+      root.add(porticoColumn);
+    }
+    const porticoRoof = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.24, 2.25), tile);
+    porticoRoof.position.set(0, 3.42, 9.0);
+    porticoRoof.rotation.x = -0.045;
+    root.add(porticoRoof);
     for (let step = 0; step < 4; step++) {
       const entryStep = new THREE.Mesh(new THREE.BoxGeometry(2.65 + step * 0.25, 0.12, 0.48), limestone);
       entryStep.position.set(0, 0.18 - step * 0.1, 8.85 + step * 0.46);
@@ -977,22 +1060,57 @@ export class PropertySceneBuilder {
     addBed(-8.2, -2.0, 1.0, 'Ocean master suite bed');
     addBed(-8.2, 4.0, 0.9, 'Garden guest suite bed');
     addBed(8.2, 4.0, 0.9, 'Courtyard guest suite bed');
-    addBed(16.0, -1.0, 0.82, 'Guest pavilion suite one');
-    addBed(16.0, 5.2, 0.82, 'Guest pavilion suite two');
+    addBed(17.2, -1.0, 0.82, 'Guest pavilion suite one');
+    addBed(17.2, 5.2, 0.82, 'Guest pavilion suite two');
 
-    // Detached guest wing with its own shaded entry and two bedrooms.
+    // Detached, matching guest pavilion with its own garden path and working front door.
     const guestFloor = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.16, 13.5), limestone);
-    guestFloor.position.set(16.0, 0.1, 1.5);
+    guestFloor.position.set(17.2, 0.1, 1.5);
     root.add(guestFloor);
-    for (const [x, z, width, depth] of [[11.8, 1.5, 0.22, 13.5], [20.2, 1.5, 0.22, 13.5], [16.0, -5.2, 8.5, 0.22], [16.0, 8.2, 8.5, 0.22]] as const) {
+    for (const [x, z, width, depth] of [[13.0, 1.5, 0.22, 13.5], [21.4, 1.5, 0.22, 13.5], [17.2, -5.2, 8.5, 0.22], [14.75, 8.2, 3.4, 0.22], [19.65, 8.2, 3.5, 0.22]] as const) {
       addBox(root, [width, 3.4, depth], [x, 2.0, z], plaster);
     }
-    const guestRoof = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.32, 14.0), tile);
-    guestRoof.position.set(16.0, 3.8, 1.5);
-    root.add(guestRoof);
+    addBox(root, [1.7, 0.4, 0.22], [17.2, 3.2, 8.2], plaster);
+    const guestShape = new THREE.Shape();
+    guestShape.moveTo(-4.25, 0);
+    guestShape.lineTo(4.25, 0);
+    guestShape.lineTo(0, 1.2);
+    guestShape.closePath();
+    const guestGable = new THREE.Mesh(new THREE.ShapeGeometry(guestShape), new THREE.MeshStandardMaterial({ color: 0xd8caba, roughness: 0.94, side: THREE.DoubleSide }));
+    guestGable.position.set(17.2, 3.7, 8.32);
+    root.add(guestGable);
+    const guestRearGable = guestGable.clone();
+    guestRearGable.position.z = -5.33;
+    guestRearGable.rotation.y = Math.PI;
+    root.add(guestRearGable);
+    for (const side of [-1, 1]) {
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(4.65, 0.2, 14.2), tile);
+      roof.position.set(17.2 + side * 2.18, 4.22, 1.5);
+      roof.rotation.z = side < 0 ? 0.35 : -0.35;
+      root.add(roof);
+    }
+    const guestRidge = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 14.4, 12), tile);
+    guestRidge.rotation.x = Math.PI / 2;
+    guestRidge.position.set(17.2, 5.02, 1.5);
+    root.add(guestRidge);
     const guestGlass = new THREE.Mesh(new THREE.BoxGeometry(8.1, 2.45, 0.06), glass);
-    guestGlass.position.set(16.0, 1.6, -5.1);
+    guestGlass.position.set(17.2, 1.6, -5.1);
     root.add(guestGlass);
+    guestDoorPivot.position.set(16.4, 0, 8.2);
+    const guestDoor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.8, 0.12), walnut);
+    guestDoor.position.set(0.8, 1.42, 0);
+    guestDoor.userData = {
+      id: 'obj-master-door', name: 'Garden Pavilion Entry', type: 'door',
+      description: 'Open the separate guest pavilion’s oak entrance from the stone garden walk.'
+    };
+    interactiveObjects.push(guestDoor);
+    guestDoorPivot.add(guestDoor);
+    const guestHandle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.1, 0.08), brass);
+    guestHandle.position.set(1.38, 1.45, 0.08);
+    guestDoorPivot.add(guestHandle);
+    const gardenLink = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 2.4), limestone);
+    gardenLink.position.set(12.4, 0.12, 1.5);
+    root.add(gardenLink);
 
     // Century-old olive, cypress silhouettes, clipped herbs and stone path lights.
     const oliveTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.55, 3.5, 14), bark);
@@ -1173,12 +1291,10 @@ export class PropertySceneBuilder {
       return mesh;
     };
 
-    // Tower-level great room with four exposures and warm white-oak flooring.
+    // A real duplex residence with a private arrival core and warm white-oak flooring.
     const lowerFloor = addBox(root, [22, 0.3, 18], [0, -0.15, 0], oak, false);
     lowerFloor.name = 'Manhattan Duplex Level 72';
     addBox(root, [22, 0.42, 18], [0, 7.58, 0], plaster, false);
-    addBox(root, [0.35, 7.2, 18], [-10.95, 3.6, 0], plaster, false);
-    addBox(root, [0.35, 7.2, 18], [10.95, 3.6, 0], plaster, false);
 
     const northView = new THREE.Mesh(new THREE.BoxGeometry(21.5, 7.2, 0.08), glass);
     northView.position.set(0, 3.6, -8.92);
@@ -1186,6 +1302,52 @@ export class PropertySceneBuilder {
     const southView = new THREE.Mesh(new THREE.BoxGeometry(21.5, 7.2, 0.08), glass);
     southView.position.set(0, 3.6, 8.92);
     root.add(southView);
+
+    // White-concrete frame members break the glass into the tower's square window rhythm.
+    const towerConcrete = new THREE.MeshStandardMaterial({ color: 0xd1cec7, roughness: 0.88 });
+    const facadeBeams = new THREE.InstancedMesh(new THREE.BoxGeometry(21.8, 0.28, 0.34), towerConcrete, 6);
+    const facadePiers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 7.2, 0.34), towerConcrete, 14);
+    const frameTransform = new THREE.Object3D();
+    let beamIndex = 0;
+    let pierIndex = 0;
+    for (const z of [-8.78, 8.78]) {
+      for (const y of [0.22, 3.8, 7.34]) {
+        frameTransform.position.set(0, y, z);
+        frameTransform.updateMatrix();
+        facadeBeams.setMatrixAt(beamIndex++, frameTransform.matrix);
+      }
+      for (const x of [-9.6, -6.4, -3.2, 0, 3.2, 6.4, 9.6]) {
+        frameTransform.position.set(x, 3.6, z);
+        frameTransform.updateMatrix();
+        facadePiers.setMatrixAt(pierIndex++, frameTransform.matrix);
+      }
+    }
+    facadeBeams.instanceMatrix.needsUpdate = true;
+    facadePiers.instanceMatrix.needsUpdate = true;
+    root.add(facadeBeams, facadePiers);
+
+    const sidePiers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 7.2, 0.22), towerConcrete, 14);
+    let sidePierIndex = 0;
+    for (const x of [-10.7, 10.7]) {
+      for (const z of [-8.65, -5.78, -2.9, 0, 2.9, 5.78, 8.65]) {
+        frameTransform.position.set(x, 3.6, z);
+        frameTransform.updateMatrix();
+        sidePiers.setMatrixAt(sidePierIndex++, frameTransform.matrix);
+      }
+    }
+    sidePiers.instanceMatrix.needsUpdate = true;
+    root.add(sidePiers);
+    const sideSpandrels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.28, 18.0), towerConcrete, 6);
+    let spandrelIndex = 0;
+    for (const x of [-10.7, 10.7]) {
+      for (const y of [0.22, 3.8, 7.34]) {
+        frameTransform.position.set(x, y, 0);
+        frameTransform.updateMatrix();
+        sideSpandrels.setMatrixAt(spandrelIndex++, frameTransform.matrix);
+      }
+    }
+    sideSpandrels.instanceMatrix.needsUpdate = true;
+    root.add(sideSpandrels);
     for (const x of [-10.85, -7.2, -3.6, 0, 3.6, 7.2, 10.85]) {
       for (const z of [-8.88, 8.88]) {
         const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.095, 7.2, 0.12), bronze);

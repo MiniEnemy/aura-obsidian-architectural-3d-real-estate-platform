@@ -545,6 +545,17 @@ export const PROPERTIES: Property[] = [
             cameraTarget: { x: -4.0, y: 1.5, z: -5.0 },
             description: 'Direct step-out access to the infinity pool deck, open marble wet-room, and private outdoor rain shower.',
             features: ['Step-Out Pool Access', 'Outdoor Rain Shower', 'Freestanding Marble Tub']
+          },
+          {
+            id: 'room-villa-guest-pavilion',
+            name: 'Detached Garden Guest Pavilion',
+            floorId: 'floor-main-villa',
+            areaSqm: 78,
+            dimensions: '8.5m x 13.5m',
+            cameraPosition: { x: 17.2, y: 1.8, z: 6.1 },
+            cameraTarget: { x: 17.2, y: 1.6, z: 1.5 },
+            description: 'A separate two-bedroom guest house with its own oak entrance, terracotta roof and stone path through the garden.',
+            features: ['Private Pivot Entry', 'Two En Suite Bedrooms', 'Independent Garden Access']
           }
         ]
       }
