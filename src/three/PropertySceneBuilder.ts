@@ -68,7 +68,7 @@ export class PropertySceneBuilder {
     if (propertyId === 'prop-villa-solaria') {
       this.buildVillaLumina(root, furnitureGroup, interactiveObjects);
     } else if (propertyId === 'prop-sky-residence') {
-      this.buildSkyResidence(root, furnitureGroup, interactiveObjects);
+      this.buildSkySanctuary(root, furnitureGroup, interactiveObjects);
     } else {
       this.buildObsidianPavilion(
         root,
@@ -753,145 +753,229 @@ export class PropertySceneBuilder {
     furnitureGroup: THREE.Group,
     interactiveObjects: THREE.Object3D[]
   ) {
-    const brass = MaterialsLibrary.get('champagne-bronze');
+    const limestone = MaterialsLibrary.get('travertine');
+    const plaster = MaterialsLibrary.get('stucco-white');
     const oak = MaterialsLibrary.get('parquet-oak');
+    const walnut = MaterialsLibrary.get('wood-slats');
     const linen = MaterialsLibrary.get('fabric-ivory');
     const olive = MaterialsLibrary.get('foliage-olive');
     const greenery = MaterialsLibrary.get('foliage-green');
-    const glow = MaterialsLibrary.get('glow-warm');
-    const whiteStucco = MaterialsLibrary.get('stucco-white');
-    const travertine = MaterialsLibrary.get('travertine');
-    const woodSlats = MaterialsLibrary.get('wood-slats');
-    const poolWater = MaterialsLibrary.get('water-pool');
+    const bark = MaterialsLibrary.get('tree-bark');
+    const brass = MaterialsLibrary.get('champagne-bronze');
     const glass = MaterialsLibrary.get('glass-facade');
-    const lawn = MaterialsLibrary.get('lawn');
+    const water = MaterialsLibrary.get('water-pool');
+    const tile = new THREE.MeshStandardMaterial({ color: 0xb96348, roughness: 0.88 });
+    const seaMat = new THREE.MeshBasicMaterial({ color: 0x2e9db4 });
 
-    const lawnMesh = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), lawn);
-    lawnMesh.rotation.x = -Math.PI / 2;
-    lawnMesh.position.y = -0.05;
-    root.add(lawnMesh);
+    // A limestone headland falls away toward the Cap d'Antibes coast.
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(44, 0.8, 36), limestone);
+    ground.position.set(0, -0.42, 0);
+    ground.receiveShadow = true;
+    root.add(ground);
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(100, 70), seaMat);
+    sea.rotation.x = -Math.PI / 2;
+    sea.position.set(0, -1.25, -40);
+    root.add(sea);
+    const cliff = new THREE.Mesh(new THREE.BoxGeometry(42, 4.2, 8), limestone);
+    cliff.position.set(0, -2.6, -20.5);
+    root.add(cliff);
+    const terrace = new THREE.Mesh(new THREE.BoxGeometry(36, 0.24, 28), limestone);
+    terrace.position.set(0, 0.02, 0);
+    terrace.receiveShadow = true;
+    root.add(terrace);
 
-    const platform = new THREE.Mesh(new THREE.BoxGeometry(36, 0.45, 28), travertine);
-    platform.position.set(0, -0.22, 0);
-    root.add(platform);
+    // Long, single-level pavilion organized around an open olive courtyard.
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(28, 0.18, 19), oak);
+    floor.position.set(0, 0.22, 0.7);
+    floor.receiveShadow = true;
+    root.add(floor);
+    const courtyard = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.08, 6.0), limestone);
+    courtyard.position.set(0.2, 0.34, 2.1);
+    root.add(courtyard);
 
-    const pool = new THREE.Mesh(new THREE.BoxGeometry(24, 0.1, 6.0), poolWater);
-    pool.position.set(0, -0.1, -9);
-    root.add(pool);
+    const wingWall = (x: number, z: number, width: number, depth: number) => {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(width, 3.8, depth), plaster);
+      wall.position.set(x, 2.1, z);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      root.add(wall);
+    };
+    // Bedroom wings turn around the open courtyard; the sea side stays glazed.
+    wingWall(-11.8, 0.6, 0.35, 16.5);
+    wingWall(-7.6, -7.5, 8.7, 0.35);
+    wingWall(-7.6, 8.7, 8.7, 0.35);
+    wingWall(11.8, 0.6, 0.35, 16.5);
+    wingWall(7.7, 8.7, 8.5, 0.35);
+    wingWall(7.7, -7.5, 8.5, 0.35);
+    wingWall(-3.9, -5.3, 0.22, 4.2);
+    wingWall(3.9, -5.3, 0.22, 4.2);
 
-    const mainRoof = new THREE.Mesh(new THREE.BoxGeometry(28, 0.45, 15), whiteStucco);
-    mainRoof.position.set(0, 4.0, 2);
-    root.add(mainRoof);
-
-    for (let x = -12; x <= 12; x += 4.8) {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 4.0, 16), whiteStucco);
-      col.position.set(x, 2.0, -4.5);
-      root.add(col);
+    const seaGlass = new THREE.Mesh(new THREE.BoxGeometry(21.5, 3.4, 0.08), glass);
+    seaGlass.position.set(0, 2.15, -7.8);
+    root.add(seaGlass);
+    for (const x of [-10.5, -6.5, -2.5, 2.5, 6.5, 10.5]) {
+      const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.11, 3.55, 0.16), brass);
+      jamb.position.set(x, 2.15, -7.75);
+      root.add(jamb);
     }
 
-    const glassWall = new THREE.Mesh(new THREE.BoxGeometry(26, 3.8, 0.06), glass);
-    glassWall.position.set(0, 1.9, -4.0);
-    root.add(glassWall);
-
-    const sunkenLounge = new THREE.Mesh(
-      new THREE.BoxGeometry(5.5, 0.55, 4.5),
-      MaterialsLibrary.get('fabric-ivory')
-    );
-    sunkenLounge.position.set(-2, 0.28, 2);
-    sunkenLounge.userData = {
-      id: 'room-villa-living',
-      name: 'Sunken Sea Lounge',
-      type: 'furniture',
-      description: 'Sunken seating area in white textured plaster and linen.'
-    };
-    interactiveObjects.push(sunkenLounge);
-    furnitureGroup.add(sunkenLounge);
-
-    const loungeBack = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.8, 0.5), linen);
-    loungeBack.position.set(-2, 0.75, 3.95);
-    furnitureGroup.add(loungeBack);
-    const diningTable = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.55, 0.16, 32), oak);
-    diningTable.position.set(6.7, 1.0, 1.3);
-    furnitureGroup.add(diningTable);
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
-      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.55), linen);
-      chair.position.set(6.7 + Math.cos(angle) * 2.0, 0.55, 1.3 + Math.sin(angle) * 2.0);
-      chair.lookAt(diningTable.position);
-      furnitureGroup.add(chair);
-    }
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.35, 2.2), linen);
-    bed.position.set(-8.0, 0.55, 3.1);
-    furnitureGroup.add(bed);
-    const bedHeadboard = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.4, 0.18), woodSlats);
-    bedHeadboard.position.set(-8.0, 1.1, 4.15);
-    furnitureGroup.add(bedHeadboard);
-
-    const chandelier = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.08, 12, 32), brass);
-    chandelier.position.set(4.5, 3.75, 1.5);
-    chandelier.userData = {
-      id: 'obj-villa-lights',
-      name: 'Villa Lumina Pendant Lights',
-      type: 'light',
-      description: 'Warm architectural pendants across the open-plan pavilion.'
-    };
-    interactiveObjects.push(chandelier);
-    root.add(chandelier);
-    const villaPointLight = new THREE.PointLight(0xffd9a0, 2.2, 14);
-    villaPointLight.position.set(4.5, 3.4, 1.5);
-    root.add(villaPointLight);
-
-    const pergola = new THREE.Group();
-    for (const x of [-9.5, -5.5]) {
-      for (const z of [-6.8, -2.3]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3.8, 0.18), woodSlats);
-        post.position.set(x, 2.2, z);
-        pergola.add(post);
+    // Separate terracotta roof planes keep the courtyard open to the sky.
+    for (const x of [-8.2, 8.2]) {
+      const roofDeck = new THREE.Mesh(new THREE.BoxGeometry(7.1, 0.38, 18.0), tile);
+      roofDeck.position.set(x, 4.15, 0.65);
+      roofDeck.castShadow = true;
+      root.add(roofDeck);
+      for (let z = -7.7; z <= 8.0; z += 0.75) {
+        const eave = new THREE.Mesh(new THREE.BoxGeometry(7.15, 0.07, 0.05), brass);
+        eave.position.set(x, 3.92, z);
+        root.add(eave);
       }
     }
-    for (let x = -10; x <= -5; x += 0.55) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 4.8), woodSlats);
-      beam.position.set(x, 4.05, -4.55);
-      pergola.add(beam);
+    // Covered loggia arches facing the garden and sea.
+    for (let x = -10; x <= 10; x += 4) {
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 3.5, 20), plaster);
+      column.position.set(x, 1.98, 8.1);
+      column.castShadow = true;
+      root.add(column);
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(1.78, 0.12, 10, 24, Math.PI), plaster);
+      arch.position.set(x, 2.65, 8.1);
+      root.add(arch);
     }
-    root.add(pergola);
 
-    // Ancient Olive tree in courtyard
-    const oliveTrunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.4, 0.55, 3.2, 12),
-      MaterialsLibrary.get('tree-bark')
-    );
-    oliveTrunk.position.set(6, 1.6, 3);
+    // The 25-metre mineral pool runs parallel to the Mediterranean horizon.
+    const poolRim = new THREE.Mesh(new THREE.BoxGeometry(27, 0.28, 7.6), limestone);
+    poolRim.position.set(0, 0.08, -12.6);
+    root.add(poolRim);
+    const poolBasin = new THREE.Mesh(new THREE.BoxGeometry(25, 0.36, 6.4), MaterialsLibrary.get('pool-tiles'));
+    poolBasin.position.set(0, -0.06, -12.6);
+    root.add(poolBasin);
+    const lapWater = new THREE.Mesh(new THREE.BoxGeometry(24.4, 0.08, 5.8), water);
+    lapWater.position.set(0, 0.18, -12.6);
+    root.add(lapWater);
+    const infinityLip = new THREE.Mesh(new THREE.BoxGeometry(24.6, 0.18, 0.16), brass);
+    infinityLip.position.set(0, 0.14, -16.3);
+    root.add(infinityLip);
+
+    const sofaMat = MaterialsLibrary.get('fabric-sofa');
+    const addBox = (parent: THREE.Group, size: [number, number, number], position: [number, number, number], material: THREE.Material) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+      mesh.position.set(...position);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+
+    // Sunken salon, layered linen seating, hearth and low stone tables.
+    const lounge = addBox(furnitureGroup, [5.8, 0.42, 4.6], [-3.8, 0.52, 1.1], linen);
+    lounge.userData = {
+      id: 'room-villa-living', name: 'Sunken Sea Lounge', type: 'furniture',
+      description: 'Limestone conversation pit with deep linen cushions and a direct view to the sea.'
+    };
+    interactiveObjects.push(lounge);
+    addBox(furnitureGroup, [5.8, 0.72, 0.32], [-3.8, 0.9, 3.15], sofaMat);
+    addBox(furnitureGroup, [0.32, 0.72, 4.3], [-6.55, 0.9, 1.15], sofaMat);
+    addBox(furnitureGroup, [0.32, 0.72, 4.3], [-1.05, 0.9, 1.15], sofaMat);
+    for (const x of [-5.5, -3.8, -2.1]) {
+      addBox(furnitureGroup, [1.5, 0.18, 1.1], [x, 0.83, 0.45], linen);
+      addBox(furnitureGroup, [1.1, 0.5, 0.18], [x, 1.05, 2.72], sofaMat);
+      addBox(furnitureGroup, [0.72, 0.42, 0.2], [x + 0.35, 1.26, 2.68], linen);
+    }
+    const hearth = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 1.8), brass);
+    hearth.position.set(-3.8, 0.26, -1.8);
+    root.add(hearth);
+    addBox(furnitureGroup, [2.1, 0.28, 1.0], [-3.8, 0.4, -0.55], limestone);
+
+    // Dining colonnade with a long oak table and ten pulled-up chairs.
+    const dining = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.14, 4.2), oak);
+    dining.position.set(5.9, 0.95, 0.8);
+    dining.castShadow = true;
+    dining.userData = { id: 'room-villa-dining', name: 'Terrace Dining Colonnade', type: 'furniture', description: 'Solid oak dining table under the shaded loggia.' };
+    interactiveObjects.push(dining);
+    furnitureGroup.add(dining);
+    for (const z of [-1.1, -0.25, 0.6, 1.45, 2.3]) {
+      for (const x of [4.7, 7.1]) {
+        addBox(furnitureGroup, [0.62, 0.72, 0.64], [x, 0.56, z], linen);
+        addBox(furnitureGroup, [0.62, 0.55, 0.16], [x, 0.91, z + 0.22], sofaMat);
+      }
+    }
+
+    // Kitchen island, cabinetry and integrated cooktop.
+    const island = addBox(furnitureGroup, [1.45, 0.92, 3.6], [5.5, 0.78, -4.0], MaterialsLibrary.get('calacatta-marble'));
+    island.userData = { id: 'spot-villa-island', name: 'Honed Calacatta Island', type: 'appliance', description: 'Waterfall stone island facing the open kitchen.' };
+    interactiveObjects.push(island);
+    addBox(furnitureGroup, [5.4, 2.65, 0.8], [8.7, 1.53, -4.0], walnut);
+    addBox(furnitureGroup, [0.8, 0.04, 1.25], [5.45, 1.27, -3.8], brass);
+
+    // Five sleeping suites: three rooms in the main pavilion and a two-room guest pavilion.
+    const addBed = (x: number, z: number, scale: number, label: string) => {
+      addBox(furnitureGroup, [2.2 * scale, 0.34, 2.45 * scale], [x, 0.46, z], walnut);
+      const mattress = addBox(furnitureGroup, [2.04 * scale, 0.3, 2.28 * scale], [x, 0.78, z], linen);
+      mattress.userData = { name: label, type: 'furniture', description: 'Layered pale linen bedding with a timber bed frame.' };
+      addBox(furnitureGroup, [2.22 * scale, 1.08, 0.16], [x, 1.05, z - 1.22 * scale], walnut);
+      addBox(furnitureGroup, [0.9 * scale, 0.14, 0.48 * scale], [x - 0.48 * scale, 0.98, z - 0.72 * scale], linen);
+      addBox(furnitureGroup, [0.9 * scale, 0.14, 0.48 * scale], [x + 0.48 * scale, 0.98, z - 0.72 * scale], linen);
+      for (const side of [-1, 1]) {
+        addBox(furnitureGroup, [0.48, 0.5, 0.5], [x + side * (1.28 * scale), 0.48, z - 0.72 * scale], walnut);
+      }
+    };
+    addBed(-8.2, -2.0, 1.0, 'Ocean master suite bed');
+    addBed(-8.2, 4.0, 0.9, 'Garden guest suite bed');
+    addBed(8.2, 4.0, 0.9, 'Courtyard guest suite bed');
+    addBed(16.0, -1.0, 0.82, 'Guest pavilion suite one');
+    addBed(16.0, 5.2, 0.82, 'Guest pavilion suite two');
+
+    // Detached guest wing with its own shaded entry and two bedrooms.
+    const guestFloor = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.16, 13.5), limestone);
+    guestFloor.position.set(16.0, 0.1, 1.5);
+    root.add(guestFloor);
+    for (const [x, z, width, depth] of [[11.8, 1.5, 0.22, 13.5], [20.2, 1.5, 0.22, 13.5], [16.0, -5.2, 8.5, 0.22], [16.0, 8.2, 8.5, 0.22]] as const) {
+      addBox(root, [width, 3.4, depth], [x, 2.0, z], plaster);
+    }
+    const guestRoof = new THREE.Mesh(new THREE.BoxGeometry(9.0, 0.32, 14.0), tile);
+    guestRoof.position.set(16.0, 3.8, 1.5);
+    root.add(guestRoof);
+    const guestGlass = new THREE.Mesh(new THREE.BoxGeometry(8.1, 2.45, 0.06), glass);
+    guestGlass.position.set(16.0, 1.6, -5.1);
+    root.add(guestGlass);
+
+    // Century-old olive, cypress silhouettes, clipped herbs and stone path lights.
+    const oliveTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.55, 3.5, 14), bark);
+    oliveTrunk.position.set(0.2, 2.1, 2.1);
     root.add(oliveTrunk);
-
-    const oliveLeaves = new THREE.Mesh(
-      new THREE.SphereGeometry(2.0, 16, 16),
-      MaterialsLibrary.get('foliage-olive')
-    );
-    oliveLeaves.position.set(6, 3.8, 3);
-    root.add(oliveLeaves);
-    for (const [x, y, z, scale] of [[5.2, 4.5, 2.3, 0.9], [6.8, 4.2, 3.4, 0.8], [5.8, 5.0, 3.8, 0.7]] as const) {
-      const leafCluster = new THREE.Mesh(new THREE.IcosahedronGeometry(scale, 1), olive);
-      leafCluster.position.set(x, y, z);
-      leafCluster.castShadow = true;
-      root.add(leafCluster);
+    const oliveCanopy = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 2), olive);
+    oliveCanopy.position.set(0.2, 4.1, 2.1);
+    oliveCanopy.scale.set(1.2, 0.75, 1.05);
+    oliveCanopy.castShadow = true;
+    root.add(oliveCanopy);
+    for (const [x, z, height] of [[-17, 8, 9], [-14, -2, 7], [23, -10, 9], [20, 9, 8], [-20, -12, 7]] as const) {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.22, height, 10), bark);
+      trunk.position.set(x, height / 2, z);
+      root.add(trunk);
+      const crown = new THREE.Mesh(new THREE.ConeGeometry(1.25, height * 0.45, 10), greenery);
+      crown.position.set(x, height * 0.79, z);
+      crown.castShadow = true;
+      root.add(crown);
     }
-    for (const x of [-10.5, -8.6, 8.4, 10.2]) {
-      const planter = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.65, 20), travertine);
-      planter.position.set(x, 0.45, -5.5);
+    for (const x of [-14, -10, -6, 10, 14]) {
+      const planter = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.55, 20), limestone);
+      planter.position.set(x, 0.38, 8.8);
       root.add(planter);
-      const plant = new THREE.Mesh(new THREE.SphereGeometry(0.65, 12, 8), greenery);
-      plant.position.set(x, 1.15, -5.5);
-      root.add(plant);
+      const shrub = new THREE.Mesh(new THREE.SphereGeometry(0.58, 12, 8), greenery);
+      shrub.position.set(x, 0.92, 8.8);
+      root.add(shrub);
     }
-    for (const x of [-8, -4, 0, 4, 8]) {
-      const light = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.35, 12), brass);
-      light.position.set(x, 0.3, -6.8);
-      root.add(light);
-      const lightGlow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), glow);
-      lightGlow.position.set(x, 0.5, -6.8);
-      root.add(lightGlow);
+    for (const x of [-10, -5, 0, 5, 10]) {
+      const pathLight = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.32, 12), brass);
+      pathLight.position.set(x, 0.28, -7.0);
+      root.add(pathLight);
     }
+
+    const chandelier = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.065, 10, 28), brass);
+    chandelier.position.set(5.9, 3.45, 0.8);
+    chandelier.userData = { id: 'obj-villa-lights', name: 'Villa Lumina Pendant Lights', type: 'light', description: 'Warm brass pendant over the dining colonnade.' };
+    interactiveObjects.push(chandelier);
+    root.add(chandelier);
   }
 
   // ==========================================
@@ -970,5 +1054,281 @@ export class PropertySceneBuilder {
     const skylineMesh = new THREE.Mesh(skylineGeo, skylineMat);
     skylineMesh.position.y = 8;
     root.add(skylineMesh);
+
+    // A Manhattan skyline visible beyond the penthouse glazing, instead of a blank sky shell.
+    const cityBlocks = [
+      [-28, -30, 4.2, 22, 3.2], [-22, -34, 3.2, 16, 3.5], [-17, -29, 4.4, 29, 4.0],
+      [-11, -37, 3.6, 20, 3.0], [-6, -31, 4.6, 36, 4.0], [0, -40, 5.0, 27, 4.0],
+      [6, -32, 4.0, 31, 3.4], [12, -38, 4.8, 19, 4.0], [18, -30, 3.4, 26, 3.2],
+      [24, -36, 4.5, 17, 4.0], [-31, -18, 3.4, 13, 3.0], [-24, -20, 4.2, 18, 3.2],
+      [-16, -19, 3.2, 12, 3.0], [-9, -21, 4.0, 16, 3.0], [8, -19, 3.5, 14, 3.0],
+      [16, -20, 4.0, 21, 3.0], [25, -19, 3.2, 15, 3.0], [31, -24, 3.8, 19, 3.0]
+    ] as const;
+    const cityGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const cityMaterial = new THREE.MeshStandardMaterial({
+      color: 0x536a82,
+      roughness: 0.88,
+      metalness: 0.08,
+      emissive: 0x142235,
+      emissiveIntensity: 0.35
+    });
+    const city = new THREE.InstancedMesh(cityGeometry, cityMaterial, cityBlocks.length);
+    const cityTransform = new THREE.Object3D();
+    cityBlocks.forEach(([x, z, width, height, depth], index) => {
+      cityTransform.position.set(x, height / 2, z);
+      cityTransform.scale.set(width, height, depth);
+      cityTransform.updateMatrix();
+      city.setMatrixAt(index, cityTransform.matrix);
+    });
+    city.instanceMatrix.needsUpdate = true;
+    city.castShadow = false;
+    city.receiveShadow = false;
+    root.add(city);
+  }
+
+  // The New York listing has its own full duplex plan and high-rise skyline.
+  private static buildSkySanctuary(
+    root: THREE.Group,
+    furnitureGroup: THREE.Group,
+    interactiveObjects: THREE.Object3D[]
+  ) {
+    const oak = MaterialsLibrary.get('parquet-oak');
+    const marble = MaterialsLibrary.get('calacatta-marble');
+    const glass = MaterialsLibrary.get('glass-facade');
+    const railingGlass = MaterialsLibrary.get('glass-balustrade');
+    const brass = MaterialsLibrary.get('champagne-bronze');
+    const plaster = MaterialsLibrary.get('stucco-white');
+    const linen = MaterialsLibrary.get('fabric-ivory');
+    const upholstery = MaterialsLibrary.get('fabric-sofa');
+    const bronze = MaterialsLibrary.get('dark-bronze');
+
+    const addBox = (
+      parent: THREE.Group,
+      size: [number, number, number],
+      position: [number, number, number],
+      material: THREE.Material,
+      castShadow = true
+    ) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+      mesh.position.set(...position);
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+
+    // Tower-level great room with four exposures and warm white-oak flooring.
+    const lowerFloor = addBox(root, [22, 0.3, 18], [0, -0.15, 0], oak, false);
+    lowerFloor.name = 'Manhattan Duplex Level 72';
+    addBox(root, [22, 0.42, 18], [0, 7.58, 0], plaster, false);
+    addBox(root, [0.35, 7.2, 18], [-10.95, 3.6, 0], plaster, false);
+    addBox(root, [0.35, 7.2, 18], [10.95, 3.6, 0], plaster, false);
+
+    const northView = new THREE.Mesh(new THREE.BoxGeometry(21.5, 7.2, 0.08), glass);
+    northView.position.set(0, 3.6, -8.92);
+    root.add(northView);
+    const southView = new THREE.Mesh(new THREE.BoxGeometry(21.5, 7.2, 0.08), glass);
+    southView.position.set(0, 3.6, 8.92);
+    root.add(southView);
+    for (const x of [-10.85, -7.2, -3.6, 0, 3.6, 7.2, 10.85]) {
+      for (const z of [-8.88, 8.88]) {
+        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.095, 7.2, 0.12), bronze);
+        mullion.position.set(x, 3.6, z);
+        root.add(mullion);
+      }
+    }
+    for (const y of [1.25, 3.6, 5.95]) {
+      for (const z of [-8.88, 8.88]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(21.5, 0.065, 0.12), bronze);
+        rail.position.set(0, y, z);
+        root.add(rail);
+      }
+    }
+
+    // Full east and west corner glazing and deep-set bronze window reveals.
+    for (const side of [-1, 1]) {
+      const sideGlass = new THREE.Mesh(new THREE.BoxGeometry(0.08, 7.1, 17.4), glass);
+      sideGlass.position.set(side * 10.76, 3.58, 0);
+      root.add(sideGlass);
+      for (const z of [-8.5, -4.2, 0, 4.2, 8.5]) {
+        const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.12, 7.1, 0.09), bronze);
+        jamb.position.set(side * 10.7, 3.58, z);
+        root.add(jamb);
+      }
+    }
+
+    // Upper duplex plate, overlooking the great room behind a clear glass guard.
+    const upperFloor = addBox(root, [21.5, 0.34, 7.5], [0, 4.0, 4.5], oak, false);
+    upperFloor.name = 'Manhattan Duplex Level 73';
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(21.3, 1.12, 0.06), railingGlass);
+    guard.position.set(0, 4.72, 0.78);
+    root.add(guard);
+    addBox(root, [21.5, 0.045, 0.08], [0, 5.29, 0.78], brass, false);
+
+    // Three private bedroom suites, separated from the gallery by full-height walls.
+    const upperWall = (x: number, z: number, width: number, depth: number) => {
+      addBox(root, [width, 2.72, depth], [x, 5.25, z], plaster);
+    };
+    // West master suite: broad doorway toward the mezzanine landing.
+    upperWall(-8.8, 1.18, 3.3, 0.16);
+    upperWall(-3.98, 1.18, 4.04, 0.16);
+    upperWall(-1.95, 4.5, 0.16, 6.5);
+    // Two east guest rooms are split by a plaster partition and reached from the gallery.
+    upperWall(2.6, 1.18, 1.8, 0.16);
+    upperWall(7.6, 1.18, 5.7, 0.16);
+    upperWall(1.7, 1.7, 0.16, 0.9);
+    upperWall(1.7, 4.57, 0.16, 1.84);
+    upperWall(1.7, 7.57, 0.16, 1.26);
+    upperWall(6.1, 4.5, 8.7, 0.16);
+    upperWall(6.1, 7.4, 8.7, 0.16);
+
+    // A floating oak stair connects the arrival level to the bedroom gallery.
+    for (let i = 0; i < 19; i++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.14, 0.42), oak);
+      step.position.set(-8.1, 0.22 + i * 0.19, 5.2 - i * 0.25);
+      step.castShadow = true;
+      root.add(step);
+    }
+    const stairGuard = new THREE.Mesh(new THREE.BoxGeometry(0.055, 1.15, 5.2), railingGlass);
+    stairGuard.position.set(-7.15, 2.3, 2.9);
+    stairGuard.rotation.x = 0.34;
+    root.add(stairGuard);
+
+    // Elevator entry vestibule and stone reception console.
+    const vestibuleWall = addBox(root, [3.8, 3.2, 0.24], [-7.8, 1.65, 7.5], plaster);
+    vestibuleWall.name = 'Private elevator vestibule';
+    const elevatorDoor = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.7, 0.08), bronze);
+    elevatorDoor.position.set(-7.8, 1.5, 7.34);
+    root.add(elevatorDoor);
+    addBox(furnitureGroup, [2.1, 0.82, 0.62], [-5.3, 0.43, 6.25], marble);
+    addBox(furnitureGroup, [0.08, 1.5, 1.2], [-10.45, 1.7, 0.6], bronze);
+
+    // Double-height salon with a generous rug, a deep sectional and low sculptural tables.
+    const rug = addBox(furnitureGroup, [8.6, 0.035, 6.8], [-2.0, 0.025, -3.5], linen, false);
+    rug.name = 'Great-room wool rug';
+    const sofa = addBox(furnitureGroup, [5.2, 0.58, 1.25], [-2.0, 0.38, -1.4], upholstery);
+    sofa.userData = { id: 'room-sky-great', name: 'Double-Height Great Room', type: 'furniture', description: 'A broad city-view salon with a tailored sectional and white-oak floor.' };
+    interactiveObjects.push(sofa);
+    addBox(furnitureGroup, [5.0, 0.75, 0.32], [-2.0, 0.97, -0.92], upholstery);
+    for (const x of [-3.75, -2.0, -0.25]) {
+      addBox(furnitureGroup, [1.58, 0.17, 1.08], [x, 0.74, -1.48], linen);
+      addBox(furnitureGroup, [1.42, 0.52, 0.22], [x, 1.05, -1.02], upholstery);
+    }
+    for (const x of [-4.6, 0.6]) addBox(furnitureGroup, [0.38, 0.62, 1.32], [x, 0.58, -1.4], upholstery);
+    const coffee = addBox(furnitureGroup, [2.3, 0.26, 1.15], [-2.0, 0.37, -3.35], marble);
+    coffee.name = 'Calacatta salon table';
+    for (const [x, z] of [[2.0, -1.6], [3.8, -1.6]] as const) {
+      const chair = addBox(furnitureGroup, [0.86, 0.76, 0.86], [x, 0.43, z], linen);
+      chair.rotation.y = x > 0 ? -0.25 : 0.25;
+    }
+
+    // Boffi-style monolith kitchen, wine wall, appliances and four counter stools.
+    const island = addBox(furnitureGroup, [1.65, 0.96, 4.0], [5.1, 0.5, -3.5], marble);
+    island.userData = { id: 'spot-sky-island', name: 'Calacatta Monolith Kitchen', type: 'appliance', description: 'Waterfall marble island with an integrated induction surface.' };
+    interactiveObjects.push(island);
+    addBox(furnitureGroup, [5.1, 2.9, 0.72], [9.9, 1.48, -3.7], oak);
+    addBox(furnitureGroup, [4.8, 0.12, 0.86], [9.55, 2.95, -3.7], marble);
+    addBox(furnitureGroup, [0.82, 0.04, 1.4], [5.0, 1.02, -3.8], bronze);
+    for (const z of [-5.6, -4.2, -2.8, -1.4]) {
+      addBox(furnitureGroup, [0.62, 0.72, 0.62], [3.8, 0.42, z], upholstery);
+    }
+    const diningTop = addBox(furnitureGroup, [1.2, 0.12, 3.0], [0.9, 0.82, 1.3], oak);
+    diningTop.userData = { id: 'room-sky-dining', name: 'Sky Dining Room', type: 'furniture', description: 'A private dining table between the elevator vestibule and the salon.' };
+    interactiveObjects.push(diningTop);
+    for (const z of [0.1, 1.2, 2.3]) {
+      for (const x of [-0.05, 1.85]) addBox(furnitureGroup, [0.52, 0.8, 0.52], [x, 0.44, z], linen);
+    }
+
+    // Three queen suites with upholstered headboards, layered quilts, nightstands and lamps.
+    const addSuiteBed = (x: number, z: number, title: string) => {
+      addBox(furnitureGroup, [2.35, 0.34, 2.55], [x, 4.1, z], oak);
+      const mattress = addBox(furnitureGroup, [2.18, 0.32, 2.38], [x, 4.42, z], linen);
+      mattress.userData = { name: title, type: 'furniture', description: 'Layered hotel-grade bedding with a timber platform and upholstered headboard.' };
+      addBox(furnitureGroup, [2.5, 1.18, 0.18], [x, 4.75, z - 1.28], upholstery);
+      addBox(furnitureGroup, [2.0, 0.12, 0.68], [x, 4.66, z + 0.48], MaterialsLibrary.get('fabric-sofa'));
+      for (const side of [-1, 1]) {
+        addBox(furnitureGroup, [0.46, 0.5, 0.5], [x + side * 1.5, 4.23, z - 0.78], oak);
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.28, 14), brass);
+        lamp.position.set(x + side * 1.5, 4.63, z - 0.78);
+        furnitureGroup.add(lamp);
+      }
+    };
+    addSuiteBed(-6.2, 5.3, 'Cloud master suite');
+    addSuiteBed(6.1, 2.9, 'Guest suite two');
+    addSuiteBed(6.1, 6.25, 'Guest suite three');
+
+    // Ensuite baths: freestanding tubs, dual vanities and clear shower enclosures.
+    const tub = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 1.45, 4, 12), marble);
+    tub.rotation.z = Math.PI / 2;
+    tub.position.set(-9.0, 4.28, 2.0);
+    furnitureGroup.add(tub);
+    addBox(furnitureGroup, [2.8, 0.88, 0.72], [-9.0, 4.38, 7.1], marble);
+    const shower = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.2, 2.0), glass);
+    shower.position.set(-10.0, 5.15, 3.0);
+    root.add(shower);
+
+    // Private south-facing loggia with planters and a slim bronze rail.
+    addBox(root, [14.0, 0.26, 3.4], [3.5, 3.82, 9.9], oak, false);
+    const balconyRail = new THREE.Mesh(new THREE.BoxGeometry(14.0, 1.05, 0.06), railingGlass);
+    balconyRail.position.set(3.5, 4.48, 11.58);
+    root.add(balconyRail);
+    addBox(root, [14.0, 0.06, 0.1], [3.5, 5.03, 11.58], brass, false);
+    for (const x of [-2.0, 2.0, 6.0, 9.0]) {
+      const planter = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.52, 0.56), plaster);
+      planter.position.set(x, 4.2, 10.45);
+      root.add(planter);
+      const plant = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 8), MaterialsLibrary.get('foliage-emerald'));
+      plant.position.set(x, 4.75, 10.45);
+      root.add(plant);
+    }
+
+    // Central Park is a recognizable green opening among Midtown towers.
+    const park = new THREE.Mesh(new THREE.BoxGeometry(13.5, 0.12, 18), new THREE.MeshBasicMaterial({ color: 0x456b4c }));
+    park.position.set(0, -0.48, -30);
+    root.add(park);
+    const parkWater = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.04, 5.0), new THREE.MeshBasicMaterial({ color: 0x5a9eb3 }));
+    parkWater.position.set(1.5, -0.38, -31);
+    root.add(parkWater);
+
+    const skyline = [
+      [-28, -27, 4.2, 24, 4.0], [-22, -34, 3.4, 18, 3.2], [-17, -29, 4.4, 31, 3.8],
+      [-12, -37, 3.5, 21, 3.2], [-8, -31, 4.0, 38, 3.6], [8, -34, 4.2, 29, 3.4],
+      [13, -29, 4.6, 35, 4.0], [19, -38, 4.0, 22, 3.5], [25, -31, 4.4, 18, 3.5],
+      [-31, -18, 3.3, 14, 3.0], [-24, -20, 4.0, 19, 3.2], [-16, -18, 3.2, 13, 3.0],
+      [17, -20, 3.7, 16, 3.0], [24, -18, 3.4, 13, 3.0], [31, -23, 4.0, 20, 3.2]
+    ] as const;
+    const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x596f85, roughness: 0.78, metalness: 0.18, emissive: 0x152336, emissiveIntensity: 0.28 });
+    const towerInstances = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), towerMaterial, skyline.length);
+    const towerTransform = new THREE.Object3D();
+    skyline.forEach(([x, z, width, height, depth], index) => {
+      towerTransform.position.set(x, height / 2, z);
+      towerTransform.scale.set(width, height, depth);
+      towerTransform.updateMatrix();
+      towerInstances.setMatrixAt(index, towerTransform.matrix);
+    });
+    towerInstances.instanceMatrix.needsUpdate = true;
+    towerInstances.castShadow = false;
+    towerInstances.receiveShadow = false;
+    root.add(towerInstances);
+
+    // Art-deco spire and soft window bands anchor the view as Manhattan, not a generic skyline.
+    const chryslerBase = new THREE.Mesh(new THREE.BoxGeometry(2.6, 27, 2.8), towerMaterial);
+    chryslerBase.position.set(15.5, 13.5, -26);
+    root.add(chryslerBase);
+    for (let y = 27; y <= 34; y += 2) {
+      const setback = new THREE.Mesh(new THREE.CylinderGeometry(1.8 - (y - 27) * 0.11, 2.0 - (y - 27) * 0.11, 1.4, 8), brass);
+      setback.position.set(15.5, y, -26);
+      root.add(setback);
+    }
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.16, 7, 8), brass);
+    spire.position.set(15.5, 39.5, -26);
+    root.add(spire);
+
+    // Suspended ring chandelier in the double-height arrival salon.
+    const chandelier = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.07, 12, 40), brass);
+    chandelier.position.set(-1.0, 6.6, -3.8);
+    chandelier.userData = { id: 'obj-sky-chandelier', name: 'Bronze Ring Chandelier', type: 'light', description: 'Sculptural suspended light above the double-height salon.' };
+    interactiveObjects.push(chandelier);
+    root.add(chandelier);
   }
 }

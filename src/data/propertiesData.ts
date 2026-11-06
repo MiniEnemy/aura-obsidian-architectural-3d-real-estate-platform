@@ -493,11 +493,6 @@ export const PROPERTIES: Property[] = [
     has3D: true,
     hasVR: true,
     hasAR: true,
-    model: {
-      glbUrl: '/models/villa-lumina-azure.glb',
-      scale: 1,
-      fitToScene: false
-    },
     floors: [
       {
         id: 'floor-main-villa',
@@ -691,10 +686,32 @@ export const PROPERTIES: Property[] = [
             floorId: 'floor-sky-73',
             areaSqm: 65,
             dimensions: '10.0m × 6.5m',
-            cameraPosition: { x: -3.0, y: 5.7, z: -1.5 },
-            cameraTarget: { x: 0, y: 5.4, z: -5.0 },
-            description: 'Upper sanctuary looking directly down into the Great Room and out toward the Chrysler and Empire State spires.',
+            cameraPosition: { x: -8.3, y: 5.7, z: 4.6 },
+            cameraTarget: { x: -6.2, y: 5.4, z: 5.3 },
+            description: 'Private upper-level suite with a dressed king bed, dual vanity, soaking tub and park-facing corner glass.',
             features: ['Corner Skyline Views', 'Motorized Blackout Shades', 'Dressing Room with Backlit Mirrors']
+          },
+          {
+            id: 'room-sky-bed-2',
+            name: 'East Guest Suite',
+            floorId: 'floor-sky-73',
+            areaSqm: 32,
+            dimensions: '6.0m x 5.2m',
+            cameraPosition: { x: 5.0, y: 5.7, z: 2.8 },
+            cameraTarget: { x: 6.1, y: 5.35, z: 2.9 },
+            description: 'Guest bedroom with a queen platform bed, built-in storage and floor-to-ceiling city glazing.',
+            features: ['Queen Platform Bed', 'Built-In Wardrobe', 'Acoustic Glazing']
+          },
+          {
+            id: 'room-sky-bed-3',
+            name: 'South Guest Suite',
+            floorId: 'floor-sky-73',
+            areaSqm: 31,
+            dimensions: '6.0m x 5.0m',
+            cameraPosition: { x: 5.0, y: 5.7, z: 6.3 },
+            cameraTarget: { x: 6.1, y: 5.35, z: 6.25 },
+            description: 'Quiet upper guest room with layered linen bedding and a private bath.',
+            features: ['Queen Platform Bed', 'Private Ensuite', 'Motorized Shades']
           }
         ]
       }

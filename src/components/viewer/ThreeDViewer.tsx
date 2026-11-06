@@ -72,6 +72,17 @@ const getObsidianGroundHeight = (x: number, z: number, previousGround: number) =
   return 0;
 };
 
+const isSkyMezzanine = (x: number, z: number) => x >= -10.6 && x <= 10.6 && z >= 0.72 && z <= 8.25;
+
+const getSkyGroundHeight = (x: number, z: number, previousGround: number) => {
+  // The modeled floating oak stair rises along the west side of the great room.
+  if (x >= -9.0 && x <= -7.2 && z >= 0.55 && z <= 5.45) {
+    return THREE.MathUtils.clamp((5.35 - z) * 0.78, 0, 4.0);
+  }
+  if (previousGround > 3.0 && isSkyMezzanine(x, z)) return 4.0;
+  return 0;
+};
+
 const disposeObject = (object: THREE.Object3D) => {
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
@@ -343,19 +354,24 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
         const previousGround = Math.max(state.position.y - 1.6, 0);
         const nextX = THREE.MathUtils.clamp(state.position.x + movement.x, -10.2 + radius, 10.2 - radius);
         const nextZ = THREE.MathUtils.clamp(state.position.z + movement.z, -8.05 + radius, 8.85 - radius);
-        const candidateGroundX = getObsidianGroundHeight(nextX, state.position.z, previousGround);
+        const getGroundAt = (x: number, z: number) => {
+          if (activeProperty.id === 'prop-obsidian-flagship') return getObsidianGroundHeight(x, z, previousGround);
+          if (activeProperty.id === 'prop-sky-residence') return getSkyGroundHeight(x, z, previousGround);
+          return Math.max(0, activeProperty.floors.find((floor) => floor.id === currentFloorRef.current)?.elevation ?? 0);
+        };
+        const candidateGroundX = getGroundAt(nextX, state.position.z);
         if (activeProperty.id !== 'prop-obsidian-flagship' || !intersectsWalkObstacle(nextX, state.position.z, candidateGroundX, radius)) {
           state.position.x = nextX;
         }
-        const candidateGroundZ = getObsidianGroundHeight(state.position.x, nextZ, previousGround);
+        const candidateGroundZ = getGroundAt(state.position.x, nextZ);
         if (activeProperty.id !== 'prop-obsidian-flagship' || !intersectsWalkObstacle(state.position.x, nextZ, candidateGroundZ, radius)) {
           state.position.z = nextZ;
         }
-        const ground = activeProperty.id === 'prop-obsidian-flagship'
-          ? getObsidianGroundHeight(state.position.x, state.position.z, previousGround)
-          : Math.max(0, activeProperty.floors.find((floor) => floor.id === currentFloorRef.current)?.elevation ?? 0);
-        if (activeProperty.id === 'prop-obsidian-flagship') {
-          const walkedFloorId = ground > 1.8 ? 'floor-upper' : 'floor-ground';
+        const ground = getGroundAt(state.position.x, state.position.z);
+        if (activeProperty.id === 'prop-obsidian-flagship' || activeProperty.id === 'prop-sky-residence') {
+          const walkedFloorId = activeProperty.id === 'prop-obsidian-flagship'
+            ? (ground > 1.8 ? 'floor-upper' : 'floor-ground')
+            : (ground > 2.5 ? 'floor-sky-73' : 'floor-sky-72');
           if (currentFloorRef.current !== walkedFloorId) {
             currentFloorRef.current = walkedFloorId;
             setCurrentFloorId(walkedFloorId);
