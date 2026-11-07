@@ -5,10 +5,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { usePropertyContext } from '../../context/PropertyContext';
 import { useViewerContext } from '../../context/ViewerContext';
 import { PropertySceneBuilder, SceneInteractiveNodes } from '../../three/PropertySceneBuilder';
-import { SkyboxGenerator } from '../../three/SkyboxGenerator';
 import { AvatarFigure } from '../../three/AvatarFigure';
 import { MaterialsLibrary } from '../../three/MaterialsLibrary';
-import { configureRenderer, createPostFX, setupSkyAndSun } from '../../three/RealismKit';
+import { configureRenderer, createPostFX, setupSkyAndSun, TimeOfDay } from '../../three/RealismKit';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, MousePointer, Move3d } from 'lucide-react';
 
 interface ThreeDViewerProps {
@@ -19,6 +18,9 @@ type Point = { x: number; y: number; z: number };
 
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
+
+const toTimeOfDay = (mode: string): TimeOfDay =>
+  mode === 'morning' ? 'golden' : mode === 'evening' || mode === 'night' ? 'dusk' : 'day';
 
 const toVector = (point: Point) => new THREE.Vector3(point.x, point.y, point.z);
 
@@ -122,7 +124,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const skyboxRef = useRef<SkyboxGenerator | null>(null);
+  const skyRef = useRef<ReturnType<typeof setupSkyAndSun> | null>(null);
   const postFXRef = useRef<ReturnType<typeof createPostFX> | null>(null);
   const nodesRef = useRef<SceneInteractiveNodes | null>(null);
   const modelRootRef = useRef<THREE.Group | null>(null);
@@ -187,22 +189,18 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 400);
+    const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 700);
     camera.position.set(14, 7.5, 25);
     camera.lookAt(0, 2.5, 0);
     const modelRenderCap = activeProperty.model?.glbUrl ? 1.15 : 1.5;
     const pixelRatio = Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85);
-    configureRenderer(renderer, {
-      pixelRatio,
-      exposure: activeProperty.model?.glbUrl ? 0.95 : 1.2,
-      shadows: quality !== 'low'
-    });
+    const rendererQuality = configureRenderer(renderer, quality);
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height, false);
     // The architecture and sun are static between control changes; refreshing a shadow map
     // on every first-person frame was doing far more GPU work than the scene needs.
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
-    scene.background = new THREE.Color(0x121821);
     sceneRef.current = scene;
     cameraRef.current = camera;
     rendererRef.current = renderer;
@@ -220,10 +218,8 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
 
     setLoadingProgress(18);
     setLoadingStatus('Calibrating natural light and atmosphere');
-    const skybox = new SkyboxGenerator(scene);
-    skybox.setMode(lightingMode);
-    skyboxRef.current = skybox;
-    const environment = setupSkyAndSun(renderer, scene, { background: false, fog: false, lighting: false });
+    const sky = setupSkyAndSun(renderer, scene, { preset: toTimeOfDay(lightingMode), quality: rendererQuality });
+    skyRef.current = sky;
     setLoadingProgress(42);
     setLoadingStatus('Building architectural surfaces');
     const nodes = activeProperty.model?.glbUrl
@@ -237,17 +233,19 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
           diningLightGlow: new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), MaterialsLibrary.get('glow-warm')),
           furnitureGroup: new THREE.Group(),
           interactiveObjects: [],
-          colliders: []
+          colliders: [],
+          interiorLights: []
         }
       : PropertySceneBuilder.buildProperty(activeProperty.id, scene);
     nodesRef.current = nodes;
+    sky.setPreset(toTimeOfDay(lightingMode), nodes.interiorLights);
     const enableAO = quality === 'high' && window.innerWidth >= 1200 && (navigator.hardwareConcurrency ?? 4) >= 8 && !modelUrl;
     let postFX: ReturnType<typeof createPostFX> | null = null;
     try {
       postFX = createPostFX(renderer, scene, camera, width, height, {
         ao: enableAO,
         bloom: quality !== 'low',
-        pixelRatio
+        quality: rendererQuality
       });
     } catch (error) {
       console.warn('[ThreeDViewer] Post-processing unavailable; using direct rendering.', error);
@@ -479,7 +477,6 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       postFXRef.current = null;
       disposeObject(scene);
       MaterialsLibrary.dispose();
-      environment.dispose();
       renderer.dispose();
       sceneRef.current = null;
       cameraRef.current = null;
@@ -487,12 +484,12 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       controlsRef.current = null;
       nodesRef.current = null;
       modelRootRef.current = null;
-      skyboxRef.current = null;
+      skyRef.current = null;
     };
   }, [activeProperty.id]);
 
   useEffect(() => {
-    skyboxRef.current?.setMode(lightingMode);
+    skyRef.current?.setPreset(toTimeOfDay(lightingMode), nodesRef.current?.interiorLights);
     if (rendererRef.current) rendererRef.current.shadowMap.needsUpdate = true;
   }, [lightingMode]);
   useEffect(() => {
@@ -501,8 +498,6 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const modelRenderCap = activeProperty.model?.glbUrl ? 1.15 : 1.5;
     const ratio = Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85);
     renderer.setPixelRatio(ratio);
-    postFXRef.current?.setPixelRatio(ratio);
-    postFXRef.current?.setAOEnabled(quality === 'high' && window.innerWidth >= 1200 && (navigator.hardwareConcurrency ?? 4) >= 8 && !activeProperty.model?.glbUrl);
     renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.needsUpdate = true;
   }, [quality]);
@@ -518,11 +513,13 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     if (rendererRef.current) rendererRef.current.shadowMap.needsUpdate = true;
     const livingOn = lightsOnState['obj-living-lights'] !== false;
     const diningOn = lightsOnState['obj-dining-chandelier'] !== false;
-    nodes.livingLight.intensity = livingOn ? 1.8 : 0;
-    nodes.diningLight.intensity = diningOn ? 1.4 : 0;
-    (nodes.livingLightGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = livingOn ? 1.5 : 0;
-    (nodes.diningLightGlow.material as THREE.MeshStandardMaterial).emissiveIntensity = diningOn ? 1.5 : 0;
-  }, [lightsOnState]);
+    nodes.livingLight.intensity = livingOn ? (nodes.livingLight.userData.base ?? 1.8) : 0;
+    nodes.diningLight.intensity = diningOn ? (nodes.diningLight.userData.base ?? 1.4) : 0;
+    const livingGlow = nodes.livingLightGlow.material as THREE.MeshStandardMaterial;
+    const diningGlow = nodes.diningLightGlow.material as THREE.MeshStandardMaterial;
+    livingGlow.emissiveIntensity = livingOn ? (livingGlow.userData.baseEmissive ?? 3.2) : 0;
+    diningGlow.emissiveIntensity = diningOn ? (diningGlow.userData.baseEmissive ?? 3.2) : 0;
+  }, [lightsOnState, lightingMode]);
 
   useEffect(() => {
     renderNeededRef.current = true;
