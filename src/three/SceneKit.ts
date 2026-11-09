@@ -31,30 +31,30 @@ export function box(parent: THREE.Object3D, size: V3, pos: V3, mat: Mat, o: BoxO
   let geo: THREE.BufferGeometry;
   if (o.round) {
     const r = typeof o.round === 'number' ? o.round : mn * 0.3;
-    geo = new RoundedBoxGeometry(w, h, d, 3, Math.max(0.001, Math.min(r, mn / 2 - 0.0005)));
+    geo = new RoundedBoxGeometry(w, h, d, mn < 0.12 ? 1 : 2, Math.max(0.001, Math.min(r, mn / 2 - 0.0005)));
   } else geo = new THREE.BoxGeometry(w, h, d);
   const m = new THREE.Mesh(geo, mat);
   m.position.set(...pos);
   if (o.rot) m.rotation.set(...o.rot);
   if (o.name) m.name = o.name;
   if (o.data) m.userData = { ...m.userData, ...o.data };
-  m.castShadow = o.cast ?? true;
+  m.castShadow = o.cast ?? Math.max(w, h, d) > 0.35; // tiny props never need to cast shadows
   m.receiveShadow = true;
   parent.add(m);
   return m;
 }
 
-export function cyl(parent: THREE.Object3D, rTop: number, rBot: number, h: number, pos: V3, mat: THREE.Material, seg = 24, rot?: V3): THREE.Mesh {
+export function cyl(parent: THREE.Object3D, rTop: number, rBot: number, h: number, pos: V3, mat: THREE.Material, seg = 16, rot?: V3): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), mat);
   m.position.set(...pos);
   if (rot) m.rotation.set(...rot);
-  m.castShadow = true;
+  m.castShadow = Math.max(rTop, rBot) * 2 > 0.2 || h > 0.8;
   m.receiveShadow = true;
   parent.add(m);
   return m;
 }
 
-export function sph(parent: THREE.Object3D, r: number, pos: V3, mat: THREE.Material, scale: V3 = [1, 1, 1], seg = 20): THREE.Mesh {
+export function sph(parent: THREE.Object3D, r: number, pos: V3, mat: THREE.Material, scale: V3 = [1, 1, 1], seg = 14): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.SphereGeometry(r, seg, Math.round(seg * 0.75)), mat);
   m.position.set(...pos);
   m.scale.set(...scale);
@@ -392,7 +392,7 @@ export function coupe(parent: THREE.Object3D, pos: V3, ry: number, paint = 'car-
   const glassGeo = new THREE.ExtrudeGeometry(gl, { depth: W - 0.28, bevelEnabled: false });
   glassGeo.translate(0, 0, -(W - 0.28) / 2);
   glassGeo.rotateY(-Math.PI / 2);
-  const glass = new THREE.Mesh(glassGeo, new THREE.MeshPhysicalMaterial({ color: 0x0b1118, metalness: 0.2, roughness: 0.04, clearcoat: 1, envMapIntensity: 1.6 }));
+  const glass = new THREE.Mesh(glassGeo, new THREE.MeshStandardMaterial({ color: 0x0b1118, metalness: 0.4, roughness: 0.05, envMapIntensity: 1.6 }));
   glass.position.y = 0.2;
   glass.castShadow = false;
   g.add(glass);
@@ -414,7 +414,7 @@ export function tree(parent: THREE.Object3D, x: number, z: number, scale = 1, se
   // two forks into the crown
   for (const s of [-1, 1]) cyl(g, 0.06 * scale, 0.11 * scale, 1.9 * scale, [s * 0.35 * scale, trunkH + 0.6 * scale, 0], M('tree-bark'), 8, [0, 0, -s * 0.38]);
   const mats = ['foliage-green', 'foliage-olive', 'foliage-emerald'];
-  const N = 9;
+  const N = 6;
   for (let i = 0; i < N; i++) {
     const a = i * 2.4 + seed, rr = (0.3 + hash01(i + seed * 5) * 1.4) * scale;
     const r = (0.8 + hash01(i * 3 + seed) * 0.75) * scale;

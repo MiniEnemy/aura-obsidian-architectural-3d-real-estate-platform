@@ -14,19 +14,26 @@ import { MaterialsLibrary } from './MaterialsLibrary';
 /* ------------------------------------------------------------------ */
 export type Quality = 'high' | 'medium' | 'low';
 
-export function detectQuality(): Quality {
+export function detectQuality(renderer?: THREE.WebGLRenderer): Quality {
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-  const cores = navigator.hardwareConcurrency ?? 4;
   if (mobile) return 'low';
-  return cores >= 8 ? 'high' : 'medium';
+  let gpu = '';
+  try {
+    const gl = renderer?.getContext();
+    const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+    if (gl && ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+  } catch { /* ignore */ }
+  if (/swiftshader|llvmpipe|software|basic render/i.test(gpu)) return 'low';
+  if (/RTX|GTX 1[0-9]|GeForce|Radeon RX|Radeon Pro|Apple M[0-9]|Apple GPU|Arc/i.test(gpu)) return 'high';
+  return 'medium';
 }
 const Q = {
   high:   { shadow: 4096, pixelRatio: 2,    ao: true,  aoSamples: 16 },
-  medium: { shadow: 2048, pixelRatio: 1.5,  ao: true,  aoSamples: 8 },
+  medium: { shadow: 2048, pixelRatio: 1.5,  ao: false, aoSamples: 8 },
   low:    { shadow: 1024, pixelRatio: 1.25, ao: false, aoSamples: 0 }
 } as const;
 
-export function configureRenderer(renderer: THREE.WebGLRenderer, quality: Quality = detectQuality()) {
+export function configureRenderer(renderer: THREE.WebGLRenderer, quality: Quality = detectQuality(renderer)) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.95;
@@ -136,8 +143,9 @@ export function setupSkyAndSun(
     hemi.intensity = p.hemi;
     bounce.intensity = name === 'day' ? 0.5 : name === 'golden' ? 0.3 : 0.14;
     (scene.fog as THREE.FogExp2).color.setHex(p.fog);
-    (scene.fog as THREE.FogExp2).density = p.fogDensity;
+    (scene.fog as THREE.FogExp2).density = p.fogDensity * ((scene.userData.fogScale as number) ?? 1);
     renderer.toneMappingExposure = p.exposure;
+    renderer.shadowMap.needsUpdate = true;
     MaterialsLibrary.setGlow(p.glow);
     for (const l of interiorLights) {
       l.userData.base ??= l.intensity;
@@ -172,31 +180,89 @@ export function createPostFX(
   camera: THREE.Camera,
   width: number,
   height: number,
-  opts: { quality?: Quality; ao?: boolean; bloom?: boolean; grade?: boolean } = {}
+  opts: { quality?: Quality; ao?: boolean; bloom?: boolean; grade?: boolean; adaptive?: boolean; maxPixelRatio?: number } = {}
 ) {
-  const quality = opts.quality ?? detectQuality();
-  const { ao = Q[quality].ao, bloom = true, grade = true } = opts;
-  const target = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples: quality === 'low' ? 2 : 4 });
+  const quality = opts.quality ?? detectQuality(renderer);
+  const { bloom = true, grade = true, adaptive = true } = opts;
+  const wantAO = opts.ao ?? true;
+  // far plane must reach the skyline/hills; also keeps the sky dome inside the frustum
+  if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+    const pc = camera as THREE.PerspectiveCamera;
+    if (pc.far < 4500) { pc.far = 4500; pc.updateProjectionMatrix(); }
+  }
+  // Static scene: shadow maps are refreshed at ~6 Hz instead of every frame.
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
+
+  // Adaptive scaling never exceeds the caller's cap (the viewer caps resolution per quality tier
+  // and per hosted-GLB load); without this it would silently reset to Q's higher ceiling.
+  const maxPR = Math.min(opts.maxPixelRatio ?? Infinity, Q[quality].pixelRatio);
+  let pr = Math.min(window.devicePixelRatio, maxPR);
+  let cssW = width, cssH = height;
+  const target = new THREE.WebGLRenderTarget(cssW * pr, cssH * pr, { type: THREE.HalfFloatType, samples: quality === 'high' ? 4 : 2 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
-  let gtao: GTAOPass | null = null;
-  if (ao) {
-    gtao = new GTAOPass(scene, camera, width, height);
+  let gtao: GTAOPass | undefined;
+  if (wantAO && quality !== 'low') {
+    gtao = new GTAOPass(scene, camera, cssW * pr, cssH * pr);
     gtao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 1.4, thickness: 1.6, scale: 1.15, samples: Q[quality].aoSamples });
+    gtao.enabled = Q[quality].ao; // medium/low start without AO; it is switched on if the GPU has headroom
     composer.addPass(gtao);
   }
-  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), 0.32, 0.55, 1.0));
+  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(cssW, cssH), 0.32, 0.55, 1.0));
   composer.addPass(new OutputPass());
   if (grade) composer.addPass(new ShaderPass(GradeShader));
 
+  const applyRes = () => {
+    renderer.setPixelRatio(pr);
+    composer.setPixelRatio(pr);
+    composer.setSize(cssW, cssH);
+  };
+  applyRes();
+
+  // ---- adaptive quality: watches real frame time, trades resolution/AO for smoothness ----
+  let last = performance.now(), ema = 16, frame = 0, cooldown = 0, dirty = false;
+  const step = () => {
+    if (!adaptive) return;
+    if (frame < 45 || --cooldown > 0) return;
+    if (ema > 27) {                                   // < ~37 fps: shed load
+      if (gtao?.enabled) { gtao.enabled = false; }
+      else if (pr > 0.7) { pr = Math.max(0.7, pr - 0.25); applyRes(); }
+      cooldown = 40; ema = 20;
+    } else if (ema < 11) {                            // lots of headroom: add quality back
+      if (gtao && !gtao.enabled && quality !== 'low') { gtao.enabled = true; cooldown = 90; ema = 16; }
+      else if (pr < Math.min(window.devicePixelRatio, maxPR)) { pr = Math.min(Math.min(window.devicePixelRatio, maxPR), pr + 0.25); applyRes(); cooldown = 90; ema = 16; }
+    }
+  };
+
   return {
     composer,
-    render: () => composer.render(),
-    setSize: (w: number, h: number) => composer.setSize(w, h),
-    setPixelRatio: (ratio: number) => composer.setPixelRatio(ratio),
-    setAOEnabled: (enabled: boolean) => { if (gtao) gtao.enabled = enabled; },
-    dispose: () => composer.dispose()
+    /** Call once per animation frame instead of renderer.render(). */
+    render: () => {
+      const now = performance.now();
+      const dt = now - last; last = now;
+      if (dt < 250) ema = ema * 0.92 + dt * 0.08;
+      frame++;
+      if (dirty || frame % 10 === 0) { renderer.shadowMap.needsUpdate = true; dirty = false; }
+      step();
+      composer.render();
+    },
+    setSize: (w: number, h: number) => { cssW = w; cssH = h; applyRes(); },
+    /**
+     * Compile every shader program off the main thread (KHR_parallel_shader_compile) and wait for the
+     * procedural textures. `await fx.warmup()` once after buildProperty(), before the first frame, to avoid
+     * a multi-second first-frame stall.
+     */
+    warmup: async () => {
+      await MaterialsLibrary.whenReady();
+      const rr = renderer as THREE.WebGLRenderer & { compileAsync?: (s: THREE.Object3D, c: THREE.Camera) => Promise<void> };
+      if (rr.compileAsync) await rr.compileAsync(scene, camera); else renderer.compile(scene, camera);
+    },
+    /** Call after moving a light/mesh that should re-cast shadows immediately. */
+    invalidateShadows: () => { dirty = true; },
+    get pixelRatio() { return pr; },
+    get aoEnabled() { return !!gtao?.enabled; }
   };
 }
 
@@ -370,7 +436,8 @@ export function addGround(
   root: THREE.Object3D,
   holes: { x: number; z: number; w: number; d: number }[] = [],
   y = -0.04,
-  size = 260
+  size = 260,
+  materialKey = 'lawn'
 ) {
   // Built from strips around the (single) hole so we can use a fine grid with vertex-colour
   // variation: no visible texture tiling, and the pool opening stays exact.
@@ -380,7 +447,7 @@ export function addGround(
     ? [[-S, S, h.z + h.d / 2 - 0.02, S], [-S, S, -S, h.z - h.d / 2 + 0.02],
        [-S, h.x - h.w / 2 + 0.02, h.z - h.d / 2, h.z + h.d / 2], [h.x + h.w / 2 - 0.02, S, h.z - h.d / 2, h.z + h.d / 2]]
     : [[-S, S, -S, S]];
-  const mat = (MaterialsLibrary.get('lawn') as THREE.MeshStandardMaterial).clone();
+  const mat = (MaterialsLibrary.get(materialKey) as THREE.MeshStandardMaterial).clone();
   mat.vertexColors = true;
   mat.userData.worldUV = true;
   const g = new THREE.Group();
@@ -470,8 +537,8 @@ export function addHills(
 /* ------------------------------------------------------------------ */
 /* 7. ORGANIC CANOPY — replaces perfect foliage spheres                */
 /* ------------------------------------------------------------------ */
-export function organicCanopy(radius: number, material: THREE.Material, seed = 1): THREE.Mesh {
-  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(radius, 3);
+export function organicCanopy(radius: number, material: THREE.Material, seed = 1, detail = 2): THREE.Mesh {
+  let g: THREE.BufferGeometry = new THREE.IcosahedronGeometry(radius, detail);
   g.deleteAttribute('normal');
   g.deleteAttribute('uv');
   g = mergeVertices(g);

@@ -22,6 +22,8 @@ export interface SceneInteractiveNodes {
 }
 
 export class PropertySceneBuilder {
+  /** set true to log build stage timings */
+  public static debug = false;
   public static buildProperty(propertyId: string, scene: THREE.Scene): SceneInteractiveNodes {
     const old = scene.getObjectByName('property-root');
     if (old) {
@@ -47,13 +49,17 @@ export class PropertySceneBuilder {
       frontDoorPivot: new THREE.Group(), masterDoorPivot: new THREE.Group(), balconySlider: new THREE.Group()
     };
 
+    const t0 = performance.now();
     if (propertyId === 'prop-villa-solaria') buildVillaLumina(ctx);
     else if (propertyId === 'prop-sky-residence') buildSkySanctuary(ctx);
     else buildObsidianPavilion(ctx);
 
     const fallback = () => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.01), MaterialsLibrary.glowClone()); root.add(m); return m; };
+    const t1 = performance.now();
     finalizeScene(root, furniture);
-    mergeStaticMeshes(root, furniture, new Set([ctx.frontDoorPivot, ctx.masterDoorPivot, ctx.balconySlider]));
+    const t2 = performance.now();
+    const merged = mergeStaticMeshes(root, furniture, new Set([ctx.frontDoorPivot, ctx.masterDoorPivot, ctx.balconySlider]));
+    if (PropertySceneBuilder.debug) console.log(`[build ${propertyId}] geometry ${(t1 - t0).toFixed(0)}ms, finalize ${(t2 - t1).toFixed(0)}ms, merge(${merged}) ${(performance.now() - t2).toFixed(0)}ms`);
     return {
       frontDoorPivot: ctx.frontDoorPivot, masterDoorPivot: ctx.masterDoorPivot, balconySlider: ctx.balconySlider,
       livingLight, livingLightGlow: ctx.livingGlow ?? fallback(),

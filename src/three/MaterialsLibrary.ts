@@ -73,32 +73,62 @@ function finish(t: THREE.CanvasTexture, srgb: boolean, repeat: number) {
   return t;
 }
 
-/** Bakes a colour map + bump map in one pass. tileMeters = real-world size of one texture tile. */
-function bake(fn: (u: number, v: number) => Texel, tileMeters: number, size = SIZE) {
+// Textures are filled in small time slices (~5 ms per slice) so building a scene never blocks the
+// main thread for seconds. Materials are usable immediately (neutral grey) and refine as slices land.
+const jobs: Array<() => boolean> = [];
+let pumping = false;
+let readyResolvers: Array<() => void> = [];
+const SLICE_MS = 5;
+
+function pump() {
+  if (pumping) return;
+  pumping = true;
+  const run = () => {
+    const t0 = performance.now();
+    while (jobs.length && performance.now() - t0 < SLICE_MS) {
+      if (jobs[0]()) jobs.shift();
+    }
+    if (jobs.length) setTimeout(run, 0);
+    else { pumping = false; readyResolvers.splice(0).forEach((r) => r()); }
+  };
+  setTimeout(run, 0);
+}
+
+/** Bakes a colour map (+ optional bump map) progressively. tileMeters = real-world size of one tile. */
+function bake(fn: (u: number, v: number) => Texel, tileMeters: number, size = SIZE, withBump = true) {
   const mk = () => {
     const c = document.createElement('canvas');
     c.width = c.height = size;
     const ctx = c.getContext('2d')!;
+    ctx.fillStyle = 'rgb(170,170,170)';
+    ctx.fillRect(0, 0, size, size);
     return { c, ctx, img: ctx.createImageData(size, size) };
   };
   const col = mk();
-  const hgt = mk();
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const [r, g, b, h] = fn(x / size, 1 - y / size);
-      const i = (y * size + x) * 4;
-      col.img.data[i] = r; col.img.data[i + 1] = g; col.img.data[i + 2] = b; col.img.data[i + 3] = 255;
-      const hv = h * 255;
-      hgt.img.data[i] = hgt.img.data[i + 1] = hgt.img.data[i + 2] = hv; hgt.img.data[i + 3] = 255;
-    }
-  }
-  col.ctx.putImageData(col.img, 0, 0);
-  hgt.ctx.putImageData(hgt.img, 0, 0);
+  const hgt = withBump ? mk() : null;
   const rep = 1 / tileMeters;
-  return {
-    map: finish(new THREE.CanvasTexture(col.c), true, rep),
-    bump: finish(new THREE.CanvasTexture(hgt.c), false, rep)
-  };
+  const map = finish(new THREE.CanvasTexture(col.c), true, rep);
+  const bump = hgt ? finish(new THREE.CanvasTexture(hgt.c), false, rep) : undefined;
+  let y = 0;
+  const ROWS = Math.max(4, Math.round(size / 32));
+  jobs.push(() => {
+    const y1 = Math.min(size, y + ROWS);
+    for (; y < y1; y++) {
+      for (let x = 0; x < size; x++) {
+        const [r, g, b, h] = fn(x / size, 1 - y / size);
+        const i = (y * size + x) * 4;
+        col.img.data[i] = r; col.img.data[i + 1] = g; col.img.data[i + 2] = b; col.img.data[i + 3] = 255;
+        if (hgt) { const hv = h * 255; hgt.img.data[i] = hgt.img.data[i + 1] = hgt.img.data[i + 2] = hv; hgt.img.data[i + 3] = 255; }
+      }
+    }
+    const y0 = y - ROWS < 0 ? 0 : y - ROWS;
+    col.ctx.putImageData(col.img, 0, 0, 0, y0, size, y - y0);
+    hgt?.ctx.putImageData(hgt.img, 0, 0, 0, y0, size, y - y0);
+    if (y >= size) { map.needsUpdate = true; if (bump) bump.needsUpdate = true; return true; }
+    return false;
+  });
+  pump();
+  return { map, bump: bump as THREE.CanvasTexture };
 }
 
 const waterNormals: THREE.Texture[] = [];
@@ -147,10 +177,10 @@ function fabric(r: number, g: number, b: number, sheen: number) {
     const h = 0.5 + 0.5 * Math.sin(v * TAU * 24);
     const k = 0.93 + 0.05 * (w * h) + (fbm(u, v, 16, 3, 3) - 0.5) * 0.12;
     return [r * k, g * k, b * k, w * h];
-  }, 0.3);
-  return flag(new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.229,
-    roughness: 0.95, metalness: 0, sheen: 1, sheenRoughness: 0.7, sheenColor: new THREE.Color(sheen)
+  }, 0.3, 256, false);
+  return flag(new THREE.MeshStandardMaterial({
+    color: 0xffffff, map: t.map,
+    roughness: 0.95, metalness: 0
   }), true);
 }
 
@@ -159,9 +189,9 @@ function foliage(r: number, g: number, b: number, seed: number) {
     const n = fbm(u, v, 12, 5, seed);
     const k = 0.72 + 0.5 * n;
     return [r * k, g * k, b * k, n];
-  }, 1 / 3);
+  }, 1 / 3, 256, false);
   return flag(new THREE.MeshStandardMaterial({
-    color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.571, roughness: 0.82, metalness: 0
+    color: 0xffffff, map: t.map, roughness: 0.82, metalness: 0
   }), false);
 }
 
@@ -171,9 +201,9 @@ const builders: Record<string, () => THREE.Material> = {
       const n = fbm(u, v, 8, 5, 1), f = fbm(u, v, 64, 2, 2);
       const k = 0.94 + 0.07 * n - 0.025 * f;
       return [214 * k, 210 * k, 202 * k, n * 0.7 + f * 0.3];
-    }, 2.0);
+    }, 2.0, 512, false);
     return flag(new THREE.MeshStandardMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.286, roughness: 0.92, metalness: 0
+      color: 0xffffff, map: t.map,  roughness: 0.92, metalness: 0
     }), true);
   },
 
@@ -204,10 +234,10 @@ const builders: Record<string, () => THREE.Material> = {
       const gap = fy < 0.03 || fy > 0.97 || fx < 0.006 || fx > 0.994;
       const k = tone * (0.88 + 0.22 * grain);
       return gap ? [104, 78, 54, 0.1] : [186 * k, 138 * k, 90 * k, 0.6 + 0.3 * grain];
-    }, 2.4, 1024);
-    return flag(new THREE.MeshPhysicalMaterial({
+    }, 2.4);
+    return flag(new THREE.MeshStandardMaterial({
       color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.229,
-      roughness: 0.42, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.35
+      roughness: 0.42, metalness: 0
     }), true);
   },
 
@@ -219,7 +249,7 @@ const builders: Record<string, () => THREE.Material> = {
       const slab = 0.96 + 0.06 * hash(Math.floor(u * 2), Math.floor(v * 2));
       const k = (0.9 + 0.14 * band) * (1 - 0.16 * pits) * joint * slab;
       return [206 * k, 192 * k, 166 * k, 0.8 - 0.5 * pits - (joint < 1 ? 0.3 : 0)];
-    }, 2.4, 1024);
+    }, 2.4);
     return flag(new THREE.MeshStandardMaterial({
       color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.343, roughness: 0.62, metalness: 0
     }), true);
@@ -237,7 +267,7 @@ const builders: Record<string, () => THREE.Material> = {
       r = mix(r, 178, gold * 0.6); g = mix(g, 142, gold * 0.6); b = mix(b, 88, gold * 0.6);
       r = mix(r, 150, fine * 0.35); g = mix(g, 148, fine * 0.35); b = mix(b, 144, fine * 0.35);
       return [r, g, b, 0.5];
-    }, 2.0, 1024);
+    }, 2.0);
     return flag(new THREE.MeshPhysicalMaterial({
       color: 0xffffff, map: t.map, roughness: 0.14, metalness: 0,
       clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.2
@@ -250,8 +280,26 @@ const builders: Record<string, () => THREE.Material> = {
       const k = 0.62 + 0.45 * a + 0.25 * b;
       const dry = 0.15 * macro;
       return [mix(50, 92, dry) * k, mix(76, 92, dry) * k, mix(34, 48, dry) * k, a * 0.4 + b * 0.6];
-    }, 6.0, 1024);
-    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.714, roughness: 1, metalness: 0 }), true);
+    }, 6.0, 512, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map,  roughness: 1, metalness: 0 }), true);
+  },
+
+  'dry-grass': () => {
+    const t = bake((u, v) => {
+      const a = fbm(u, v, 10, 4, 120), b = fbm(u, v, 128, 2, 121), c = fbm(u, v, 3, 3, 122);
+      const k = 0.7 + 0.5 * a + 0.2 * b;
+      return [mix(86, 116, c) * k, mix(98, 116, c) * k, mix(54, 64, c) * k, a * 0.5 + b * 0.5];
+    }, 6.0, 512, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, roughness: 1, metalness: 0 }), true);
+  },
+
+  'cliff-rock': () => {
+    const t = bake((u, v) => {
+      const strata = vnoise(u, v, 3, 22, 130), crack = sstep(0.45, 0.5, fbm(u, v, 12, 4, 131));
+      const k = (0.62 + 0.5 * strata) * (0.78 + 0.3 * crack);
+      return [172 * k, 156 * k, 130 * k, strata * 0.6 + crack * 0.4];
+    }, 6.0, 512, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, roughness: 0.95, metalness: 0 }), true);
   },
 
   'pool-tiles': () => {
@@ -263,8 +311,8 @@ const builders: Record<string, () => THREE.Material> = {
       const k = 0.85 + 0.3 * hash(i, j);
       return grout ? [190, 196, 196, 0] : [52 * k, 158 * k, 178 * k, 0.8];
     }, 1.0);
-    return flag(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.429, roughness: 0.18, metalness: 0, clearcoat: 0.6
+    return flag(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.429, roughness: 0.18, metalness: 0
     }), true);
   },
 
@@ -276,10 +324,10 @@ const builders: Record<string, () => THREE.Material> = {
       const g = fbm(u, v, 64, 3, 40);
       const k = 0.82 + 0.3 * fbm(u, v, 6, 3, 41);
       return [124 * k, 68 * k, 34 * k, g];
-    }, 0.5);
-    return flag(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.429,
-      roughness: 0.48, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.4
+    }, 0.5, 256, false);
+    return flag(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: t.map, 
+      roughness: 0.48, metalness: 0
     }), true);
   },
 
@@ -290,7 +338,7 @@ const builders: Record<string, () => THREE.Material> = {
       return [92 * k, 74 * k, 58 * k, n];
     }, 1 / 3);
     return flag(new THREE.MeshStandardMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 1.143, roughness: 1, metalness: 0
+      color: 0xffffff, map: t.map,  roughness: 1, metalness: 0
     }), false);
   },
 
@@ -306,8 +354,8 @@ const builders: Record<string, () => THREE.Material> = {
       const n = fbm(u, v, 6, 5, 90), p = sstep(0.74, 0.82, fbm(u, v, 64, 2, 91));
       const k = (0.86 + 0.2 * n) * (1 - 0.25 * p);
       return [178 * k, 176 * k, 170 * k, n * 0.6 + (1 - p) * 0.4];
-    }, 2.4);
-    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.4, roughness: 0.9 }), true);
+    }, 2.4, 512, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map,  roughness: 0.9 }), true);
   },
 
   gravel: () => {
@@ -315,8 +363,8 @@ const builders: Record<string, () => THREE.Material> = {
       const a = fbm(u, v, 96, 2, 92), b = hash(Math.floor(u * 128), Math.floor(v * 128));
       const k = 0.55 + 0.6 * a + 0.25 * b;
       return [172 * k, 164 * k, 150 * k, a * 0.5 + b * 0.5];
-    }, 1.0);
-    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 1.143, roughness: 1 }), true);
+    }, 1.0, 512, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map,  roughness: 1 }), true);
   },
 
   walnut: () => {
@@ -325,8 +373,8 @@ const builders: Record<string, () => THREE.Material> = {
       const k = 0.78 + 0.45 * g;
       return [96 * k, 64 * k, 42 * k, g];
     }, 1.2);
-    return flag(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.2, roughness: 0.48, clearcoat: 0.2, clearcoatRoughness: 0.4
+    return flag(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.2, roughness: 0.48
     }), true);
   },
 
@@ -336,8 +384,8 @@ const builders: Record<string, () => THREE.Material> = {
       const k = 0.88 + 0.28 * g;
       return [214 * k, 186 * k, 148 * k, g];
     }, 1.2);
-    return flag(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.171, roughness: 0.5, clearcoat: 0.15
+    return flag(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.171, roughness: 0.5
     }), true);
   },
 
@@ -346,16 +394,16 @@ const builders: Record<string, () => THREE.Material> = {
       const n = fbm(u, v, 24, 4, 97), f = fbm(u, v, 128, 2, 98);
       const k = 0.88 + 0.2 * n + 0.05 * f;
       return [212 * k, 205 * k, 192 * k, n * 0.4 + f * 0.6];
-    }, 1.0);
-    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.914, roughness: 1 }), true);
+    }, 1.0, 256, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map,  roughness: 1 }), true);
   },
   'rug-dark': () => {
     const t = bake((u, v) => {
       const n = fbm(u, v, 24, 4, 99), f = fbm(u, v, 128, 2, 100);
       const k = 0.85 + 0.25 * n + 0.06 * f;
       return [86 * k, 84 * k, 82 * k, n * 0.4 + f * 0.6];
-    }, 1.0);
-    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.914, roughness: 1 }), true);
+    }, 1.0, 256, false);
+    return flag(new THREE.MeshStandardMaterial({ color: 0xffffff, map: t.map,  roughness: 1 }), true);
   },
 
   'curtain-linen': () => {
@@ -364,9 +412,8 @@ const builders: Record<string, () => THREE.Material> = {
       const k = 0.86 + 0.14 * slub;
       return [226 * k, 218 * k, 202 * k, slub];
     }, 0.4);
-    return flag(new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.171, roughness: 0.95, side: THREE.DoubleSide,
-      sheen: 1, sheenRoughness: 0.8, sheenColor: new THREE.Color(0xffffff)
+    return flag(new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: t.map,  roughness: 0.95, side: THREE.DoubleSide
     }), false);
   },
 
@@ -378,11 +425,11 @@ const builders: Record<string, () => THREE.Material> = {
       return [44 * k, 96 * k, 40 * k, n + vein * 0];
     }, 0.5);
     return flag(new THREE.MeshStandardMaterial({
-      color: 0xffffff, map: t.map, bumpMap: t.bump, bumpScale: 0.429, roughness: 0.5, side: THREE.DoubleSide
+      color: 0xffffff, map: t.map,  roughness: 0.5, side: THREE.DoubleSide
     }), false);
   },
 
-  'ceramic-white': () => flag(new THREE.MeshPhysicalMaterial({ color: 0xf6f5f1, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.05 }), false),
+  'ceramic-white': () => flag(new THREE.MeshStandardMaterial({ color: 0xf6f5f1, roughness: 0.14 }), false),
   'steel-brushed': () => flag(new THREE.MeshStandardMaterial({ color: 0xc2c6ca, metalness: 1, roughness: 0.36 }), false),
   'black-steel': () => flag(new THREE.MeshStandardMaterial({ color: 0x1c1c1e, metalness: 0.9, roughness: 0.42 }), false),
   mirror: () => flag(new THREE.MeshStandardMaterial({ color: 0xe9eff1, metalness: 1, roughness: 0.025, envMapIntensity: 1.3 }), false),
@@ -410,13 +457,13 @@ const builders: Record<string, () => THREE.Material> = {
 
   // Cheap physically-plausible glass (no transmission pass). Swap in `transmission: 1, thickness: 0.05`
   // on hero panes only if you want refraction; it costs a full extra scene render.
-  'glass-facade': () => flag(new THREE.MeshPhysicalMaterial({
+  'glass-facade': () => flag(new THREE.MeshStandardMaterial({
     color: 0x9bbdc8, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.14,
-    envMapIntensity: 0.9, ior: 1.5, depthWrite: false
+    envMapIntensity: 0.9, depthWrite: false
   }), false),
-  'glass-balustrade': () => flag(new THREE.MeshPhysicalMaterial({
+  'glass-balustrade': () => flag(new THREE.MeshStandardMaterial({
     color: 0xcfe4e8, metalness: 0, roughness: 0.02, transparent: true, opacity: 0.12,
-    envMapIntensity: 0.9, ior: 1.5, depthWrite: false
+    envMapIntensity: 0.9, depthWrite: false
   }), false),
 
   // Emissive > 1 so the bloom pass (threshold 1.0) picks it up and nothing else.
@@ -424,21 +471,20 @@ const builders: Record<string, () => THREE.Material> = {
     color: 0x2a1c0c, emissive: 0xffc275, emissiveIntensity: 3.2, roughness: 0.6
   }), false),
 
-  'water-pool': () => flag(new THREE.MeshPhysicalMaterial({
+  'water-pool': () => flag(new THREE.MeshStandardMaterial({
     color: 0x1b9fc0, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.86,
-    normalMap: waterNormalMap(6), normalScale: new THREE.Vector2(0.22, 0.22),
-    clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.9, ior: 1.33
+    normalMap: waterNormalMap(6), normalScale: new THREE.Vector2(0.22, 0.22), envMapIntensity: 1.9
   }), false),
 
-  'water-sea': () => flag(new THREE.MeshPhysicalMaterial({
+  'water-sea': () => flag(new THREE.MeshStandardMaterial({
     color: 0x0f5f7a, roughness: 0.12, metalness: 0,
-    normalMap: waterNormalMap(40), normalScale: new THREE.Vector2(0.5, 0.5),
+    normalMap: waterNormalMap(70), normalScale: new THREE.Vector2(0.3, 0.3),
     envMapIntensity: 1.6
   }), false),
 
-  'car-pearl': () => flag(new THREE.MeshPhysicalMaterial({ color: 0xe9e8e4, metalness: 0.7, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.3 }), false),
-  'car-metallic': () => flag(new THREE.MeshPhysicalMaterial({
-    color: 0x1c2733, metalness: 0.9, roughness: 0.26, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.4
+  'car-pearl': () => flag(new THREE.MeshStandardMaterial({ color: 0xe9e8e4, metalness: 0.7, roughness: 0.3, envMapIntensity: 1.3 }), false),
+  'car-metallic': () => flag(new THREE.MeshStandardMaterial({
+    color: 0x1c2733, metalness: 0.9, roughness: 0.26, envMapIntensity: 1.4
   }), false)
 };
 
@@ -496,7 +542,7 @@ export class MaterialsLibrary {
     let m = MaterialsLibrary.cache.get(key);
     if (m) return m;
     const c = document.createElement('canvas');
-    c.width = 512; c.height = 384;
+    c.width = 256; c.height = 192;
     const x = c.getContext('2d')!;
     const palettes = [
       ['#e9e2d4', '#c8553d', '#2f4858', '#f2c14e'], ['#efece6', '#6b7f6a', '#b9a590', '#2b2b2b'],
@@ -504,28 +550,28 @@ export class MaterialsLibrary {
     ];
     const pal = palettes[seed % palettes.length];
     const r = (n: number) => hash(seed * 31 + n, n * 7 + 3);
-    x.fillStyle = pal[0]; x.fillRect(0, 0, 512, 384);
+    x.fillStyle = pal[0]; x.fillRect(0, 0, 256, 192);
     for (let i = 0; i < 5; i++) {
       x.globalAlpha = 0.55 + 0.4 * r(i);
       x.fillStyle = pal[1 + (i % 3)];
-      const w = 120 + r(i + 10) * 260, h = 80 + r(i + 20) * 220;
-      const px = r(i + 30) * (512 - w), py = r(i + 40) * (384 - h);
+      const w = 60 + r(i + 10) * 130, h = 40 + r(i + 20) * 110;
+      const px = r(i + 30) * (256 - w), py = r(i + 40) * (192 - h);
       if (i % 2) { x.beginPath(); x.ellipse(px + w / 2, py + h / 2, w / 2, h / 2, r(i) * 3, 0, TAU); x.fill(); }
       else x.fillRect(px, py, w, h);
     }
     x.globalAlpha = 1;
-    const id = x.getImageData(0, 0, 512, 384);
-    for (let i = 0; i < id.data.length; i += 4) {          // canvas-weave grain
-      const n = (hash(i, seed) - 0.5) * 16;
-      id.data[i] += n; id.data[i + 1] += n; id.data[i + 2] += n;
-    }
-    x.putImageData(id, 0, 0);
+    // (canvas-weave grain removed: it cost ~400 ms per painting for no visible gain)
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 8;
     m = flag(new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 }), false);
     MaterialsLibrary.cache.set(key, m);
     return m;
+  }
+
+  /** Resolves when every queued procedural texture has finished baking (use for a loading overlay). */
+  static whenReady(): Promise<void> {
+    return jobs.length || pumping ? new Promise((r) => readyResolvers.push(r)) : Promise.resolve();
   }
 
   /** Call every frame with clock.elapsedTime. */

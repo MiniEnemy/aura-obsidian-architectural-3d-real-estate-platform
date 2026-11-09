@@ -133,7 +133,6 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   const rafRef = useRef<number | null>(null);
   const visibleRef = useRef(true);
   const keysRef = useRef<Record<string, boolean>>({});
-  const fpsRef = useRef({ frames: 0, elapsed: 0, degraded: false });
   const cameraModeRef = useRef(cameraMode);
   const currentFloorRef = useRef(currentFloorId);
   const currentRoomRef = useRef(currentRoomId);
@@ -193,9 +192,9 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     camera.position.set(14, 7.5, 25);
     camera.lookAt(0, 2.5, 0);
     const modelRenderCap = activeProperty.model?.glbUrl ? 1.15 : 1.5;
-    const pixelRatio = Math.min(window.devicePixelRatio, quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85);
+    const maxPixelRatio = quality === 'high' ? modelRenderCap : quality === 'medium' ? 1.05 : 0.85;
     const rendererQuality = configureRenderer(renderer, quality);
-    renderer.setPixelRatio(pixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
     renderer.setSize(width, height, false);
     // The architecture and sun are static between control changes; refreshing a shadow map
     // on every first-person frame was doing far more GPU work than the scene needs.
@@ -239,13 +238,16 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       : PropertySceneBuilder.buildProperty(activeProperty.id, scene);
     nodesRef.current = nodes;
     sky.setPreset(toTimeOfDay(lightingMode), nodes.interiorLights);
-    const enableAO = quality === 'high' && window.innerWidth >= 1200 && (navigator.hardwareConcurrency ?? 4) >= 8 && !modelUrl;
+    // RealismKit owns AO now: it allocates the pass per quality tier and only renders it when the
+    // GPU has headroom. The hosted-GLB path is the one viewer-specific exception — its material
+    // cost makes AO unsafe to assume. maxPixelRatio preserves the resolution caps used above.
     let postFX: ReturnType<typeof createPostFX> | null = null;
     try {
       postFX = createPostFX(renderer, scene, camera, width, height, {
-        ao: enableAO,
+        ao: !modelUrl,
         bloom: quality !== 'low',
-        quality: rendererQuality
+        quality: rendererQuality,
+        maxPixelRatio
       });
     } catch (error) {
       console.warn('[ThreeDViewer] Post-processing unavailable; using direct rendering.', error);
@@ -266,11 +268,29 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     scene.add(modelRoot);
     modelRootRef.current = modelRoot;
     let readyTimer: number | null = null;
-    const finishLoading = () => {
+    let warmupDone = false;
+    let disposed = false;
+    const finishWarmup = () => {
+      if (disposed) return;
+      warmupDone = true;
       renderer.shadowMap.needsUpdate = true;
+      renderNeededRef.current = true;
       setLoadingProgress(100);
       setLoadingStatus('Ready to explore');
       readyTimer = window.setTimeout(() => setIsLoading(false), 250);
+    };
+    const finishLoading = () => {
+      setLoadingStatus('Compiling architectural shaders');
+      setLoadingProgress(96);
+      // fx.warmup() bakes the remaining procedural textures and compiles every shader program off
+      // the main thread, so the first frame after the loader drops does not stall for seconds. The
+      // timeout is a safety net: a failed bake must never strand the user on the loading screen.
+      const warmup = postFX ? postFX.warmup() : MaterialsLibrary.whenReady();
+      const deadline = new Promise<void>((resolve) => window.setTimeout(resolve, 10000));
+      Promise.race([warmup, deadline]).then(finishWarmup, (error: unknown) => {
+        console.warn('[ThreeDViewer] Shader warmup skipped.', error);
+        finishWarmup();
+      });
     };
     if (modelUrl) {
       const loader = new GLTFLoader();
@@ -440,19 +460,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
         camera.position.lerp(follow, 1 - Math.pow(0.001, delta));
         camera.lookAt(state.position.x, ground + 1.2, state.position.z);
       }
-      fpsRef.current.frames += 1;
-      fpsRef.current.elapsed += delta;
-      if (fpsRef.current.elapsed > 2) {
-        if (fpsRef.current.frames / fpsRef.current.elapsed < 45 && !fpsRef.current.degraded) {
-          fpsRef.current.degraded = true;
-          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.85));
-          postFXRef.current?.setPixelRatio(Math.min(window.devicePixelRatio, 0.85));
-          postFXRef.current?.setAOEnabled(false);
-          renderer.shadowMap.enabled = false;
-        }
-        fpsRef.current.frames = 0;
-        fpsRef.current.elapsed = 0;
-      }
+      // Drawing mid-warmup would synchronously compile the very shaders compileAsync() is already
+      // preparing off-thread, so the first real frame is held until warmup lands. Resolution and AO
+      // shedding now live in RealismKit's adaptive step(), which runs from postFX.render().
+      if (!warmupDone) return;
       if (cameraModeRef.current !== 'orbit' || controlsChanged || cameraIsAnimated || renderNeededRef.current) {
         onCameraMove?.(camera.position.x, camera.position.z, camera.rotation.y);
         MaterialsLibrary.update(timer.getElapsed());
@@ -465,6 +476,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     const onContextLost = (event: Event) => { event.preventDefault(); setWebglError(true); };
     renderer.domElement.addEventListener('webglcontextlost', onContextLost);
     return () => {
+      disposed = true;
       if (readyTimer !== null) window.clearTimeout(readyTimer);
       resizeObserver.disconnect();
       visibilityObserver.disconnect();
@@ -473,7 +485,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       controls.removeEventListener('change', onControlsChange);
       controls.dispose();
-      postFXRef.current?.dispose();
+      postFXRef.current?.composer.dispose();
       postFXRef.current = null;
       disposeObject(scene);
       MaterialsLibrary.dispose();

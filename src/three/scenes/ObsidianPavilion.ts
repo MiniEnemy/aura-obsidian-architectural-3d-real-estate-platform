@@ -60,7 +60,7 @@ export function buildObsidianPavilion(ctx: BuildCtx) {
   box(root, [0.12, 0.14, 22.1], [13, 7.18, 0.5], bronze);
   // PV array
   for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) {
-    box(root, [2.6, 0.05, 1.8], [-8 + i * 3.1, 7.45, -4 + j * 3.2], new THREE.MeshPhysicalMaterial({ color: 0x0f1a2a, metalness: 0.4, roughness: 0.22, clearcoat: 1 }), { rot: [0.18, 0, 0] });
+    box(root, [2.6, 0.05, 1.8], [-8 + i * 3.1, 7.45, -4 + j * 3.2], new THREE.MeshStandardMaterial({ color: 0x0f1a2a, metalness: 0.5, roughness: 0.2 }), { rot: [0.18, 0, 0] });
   }
   // recessed downlights under front overhang
   for (let x = -9; x <= 9; x += 3) {
