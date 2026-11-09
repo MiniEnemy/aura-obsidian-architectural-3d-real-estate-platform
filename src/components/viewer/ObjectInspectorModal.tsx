@@ -25,7 +25,7 @@ export const ObjectInspectorModal: React.FC = () => {
   const curtainState = curtainsOpenState[selectedObject.id] !== false;
 
   return (
-    <div className="absolute top-20 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-6 z-40 w-96 glass-modal rounded-xl border border-[#d4af37]/40 p-5 shadow-2xl font-mono text-xs animate-fade-in">
+    <div className="absolute top-20 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-6 z-40 w-96 glass-hud-modal rounded-xl border border-[#d4af37]/40 p-5 shadow-2xl font-mono text-xs animate-fade-in">
       <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <div className="flex items-center gap-2 text-[#d4af37] tracking-widest uppercase font-semibold">
           <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />

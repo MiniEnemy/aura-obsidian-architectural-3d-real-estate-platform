@@ -168,6 +168,7 @@ export const PropertyDetailPage: React.FC<PropertyDetailPageProps> = ({
           <img
             src={allImages[activeGalleryIndex]}
             alt={property.name}
+            decoding="async"
             className="w-full h-full object-cover transition-opacity duration-500"
           />
 
@@ -206,7 +207,7 @@ export const PropertyDetailPage: React.FC<PropertyDetailPageProps> = ({
                   : 'border-white/10 opacity-70 hover:opacity-100'
               }`}
             >
-              <img src={img} alt="Thumbnail" className="w-full h-full object-cover" />
+              <img src={img} alt="Thumbnail" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>
@@ -349,6 +350,8 @@ export const PropertyDetailPage: React.FC<PropertyDetailPageProps> = ({
               <img
                 src={property.agent.avatarUrl}
                 alt={property.agent.name}
+                loading="lazy"
+                decoding="async"
                 className="w-16 h-16 rounded-full object-cover border-2 border-[#d4af37]/60"
               />
               <div>

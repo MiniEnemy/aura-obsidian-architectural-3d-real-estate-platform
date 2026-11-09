@@ -152,6 +152,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   const pointerRef = useRef({ down: false, moved: false, x: 0, y: 0, startX: 0, startY: 0 });
   const renderNeededRef = useRef(true);
   const animationUntilRef = useRef(0);
+  // The animate loop lives in an effect keyed on property/quality, so reading door/curtain
+  // state straight from the render closure would freeze it at mount — toggles then appeared
+  // dead because the loop kept damping toward the original targets. A ref keeps it live.
+  const doorStateRef = useRef({ doorsOpenState, curtainsOpenState });
   // Hover/cursor bookkeeping lives in refs: pointermove fires faster than animation frames (and
   // faster than React should re-render), so at most one raycast runs per frame, deferred from
   // the event itself, and cursor flips never touch React state.
@@ -460,11 +464,12 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
         camera.lookAt(vectors.lookAt.copy(state.position).add(vectors.lookDirection.set(-Math.sin(state.yaw), Math.sin(state.pitch), -Math.cos(state.yaw))));
         if (avatarRef.current) { avatarRef.current.position.set(state.position.x, ground, state.position.z); avatarRef.current.updateDirection(state.yaw); }
       } else controlsChanged = controls.update();
-      const targetDoor = doorsOpenState['obj-front-door'] ? -Math.PI / 2 : 0;
+      const interactive = doorStateRef.current;
+      const targetDoor = interactive.doorsOpenState['obj-front-door'] ? -Math.PI / 2 : 0;
       nodes.frontDoorPivot.rotation.y = THREE.MathUtils.damp(nodes.frontDoorPivot.rotation.y, targetDoor, 7, delta);
-      const targetMasterDoor = doorsOpenState['obj-master-door'] ? Math.PI / 2 : 0;
+      const targetMasterDoor = interactive.doorsOpenState['obj-master-door'] ? Math.PI / 2 : 0;
       nodes.masterDoorPivot.rotation.y = THREE.MathUtils.damp(nodes.masterDoorPivot.rotation.y, targetMasterDoor, 7, delta);
-      nodes.balconySlider.position.x = THREE.MathUtils.damp(nodes.balconySlider.position.x, curtainsOpenState['obj-master-curtains'] ? -1.8 : 0, 7, delta);
+      nodes.balconySlider.position.x = THREE.MathUtils.damp(nodes.balconySlider.position.x, interactive.curtainsOpenState['obj-master-curtains'] ? -1.8 : 0, 7, delta);
       if (cameraModeRef.current === 'third-person') {
         const state = fppRef.current;
         const ground = Math.max(state.position.y - 1.6, 0);
@@ -560,6 +565,7 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   }, [lightsOnState, lightingMode]);
 
   useEffect(() => {
+    doorStateRef.current = { doorsOpenState, curtainsOpenState };
     renderNeededRef.current = true;
     animationUntilRef.current = performance.now() + 900;
   }, [doorsOpenState, curtainsOpenState]);
@@ -721,6 +727,6 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     </div>}
     {isMeasuringActive && <div className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded border border-[#d4af37]/50 bg-[#121821]/90 px-3 py-2 text-center text-xs text-white/85" role="status">Measure surfaces · {activeMeasurementPoints.length}/2 selected</div>}
     <div className="sr-only" role="status" aria-live="polite">{announcedRoom}</div>
-    {showRoomLabels && !isExterior && <div className="pointer-events-none absolute inset-0 z-10"><div className="pointer-events-auto absolute bottom-24 left-1/2 flex max-w-[90%] -translate-x-1/2 gap-2 overflow-x-auto rounded-lg border border-white/10 bg-[#121821]/85 p-2 backdrop-blur-md">{activeProperty.floors.flatMap((floor) => floor.rooms).map((room) => <button key={room.id} onClick={() => jumpToRoom(room.id)} className={`min-h-11 shrink-0 rounded px-3 text-left text-xs focus:outline-none focus:ring-2 focus:ring-[#d4af37] ${currentRoomId === room.id ? 'bg-[#d4af37] text-[#121821]' : 'bg-white/5 text-white/75'}`} aria-label={`Jump to ${room.name}`}>{room.name}</button>)}</div></div>}
+    {showRoomLabels && !isExterior && <div className="pointer-events-none absolute inset-0 z-10"><div className="pointer-events-auto absolute bottom-24 left-1/2 flex max-w-[90%] -translate-x-1/2 gap-2 overflow-x-auto rounded-lg border border-white/10 bg-[#121821]/92 p-2">{activeProperty.floors.flatMap((floor) => floor.rooms).map((room) => <button key={room.id} onClick={() => jumpToRoom(room.id)} className={`min-h-11 shrink-0 rounded px-3 text-left text-xs focus:outline-none focus:ring-2 focus:ring-[#d4af37] ${currentRoomId === room.id ? 'bg-[#d4af37] text-[#121821]' : 'bg-white/5 text-white/75'}`} aria-label={`Jump to ${room.name}`}>{room.name}</button>)}</div></div>}
   </div>;
 };

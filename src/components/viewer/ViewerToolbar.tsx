@@ -58,7 +58,7 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   } = useViewerContext();
 
   return (
-    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 max-w-[96vw] overflow-x-auto p-1.5 glass-panel rounded-lg flex items-center gap-1.5 shadow-2xl border border-[#d4af37]/25 text-xs font-mono">
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 max-w-[96vw] overflow-x-auto p-1.5 glass-hud rounded-lg flex items-center gap-1.5 shadow-2xl border border-[#d4af37]/25 text-xs font-mono">
       {/* 1. Camera Mode Group */}
       <div className="flex items-center bg-[#12151a]/90 p-1 rounded border border-white/5">
         <button

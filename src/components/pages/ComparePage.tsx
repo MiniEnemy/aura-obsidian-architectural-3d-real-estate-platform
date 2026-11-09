@@ -100,6 +100,8 @@ export const ComparePage: React.FC<ComparePageProps> = ({
                     <img
                       src={p.images.hero}
                       alt={p.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-36 rounded-lg object-cover mb-3 border border-white/10"
                     />
                     <button

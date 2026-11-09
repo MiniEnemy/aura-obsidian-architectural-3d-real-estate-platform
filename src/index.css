@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./fonts.css";
 
 @layer base {
   :root {
@@ -61,6 +62,27 @@
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 32px rgba(212, 175, 55, 0.12), 0 28px 60px -15px rgba(0, 0, 0, 0.9);
+}
+
+/* Blur-free variants for HUD panels that sit ON the live 3D canvas. backdrop-filter re-blurs
+   its region every time the WebGL canvas repaints (every rendered frame), which is a major
+   source of drag jank inside the viewer — these keep the same look without the per-frame cost.
+   Use them only over the canvas; static pages can keep the glass tiers above for free. */
+.glass-hud {
+  background: rgba(24, 28, 34, 0.93);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7);
+}
+
+.glass-hud-modal {
+  background: rgba(29, 34, 43, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 32px rgba(212, 175, 55, 0.12), 0 28px 60px -15px rgba(0, 0, 0, 0.9);
+}
+
+.glass-hud-submerged {
+  background: rgba(18, 21, 26, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .gold-glow {

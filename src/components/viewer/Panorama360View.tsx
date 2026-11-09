@@ -126,7 +126,7 @@ export const Panorama360View: React.FC = () => {
 
       {/* Top Bar */}
       <div className="absolute top-5 left-5 right-5 flex items-center justify-between pointer-events-none z-50">
-        <div className="pointer-events-auto px-4 py-2 glass-panel rounded-lg flex items-center gap-2.5 font-mono text-xs border border-[#d4af37]/30">
+        <div className="pointer-events-auto px-4 py-2 glass-hud rounded-lg flex items-center gap-2.5 font-mono text-xs border border-[#d4af37]/30">
           <Camera className="w-4 h-4 text-[#d4af37]" />
           <span className="text-[#f5f6f8] font-semibold">360° Panorama Sphere Mode</span>
           <span className="text-[10px] text-[#9eacb8] uppercase">| Drag to look</span>
@@ -134,7 +134,7 @@ export const Panorama360View: React.FC = () => {
 
         <button
           onClick={() => setIs360Mode(false)}
-          className="pointer-events-auto px-3.5 py-2 glass-panel rounded-lg flex items-center gap-2 text-xs font-mono text-[#d4af37] border border-[#d4af37]/40 hover:bg-[#d4af37]/20 transition-all"
+          className="pointer-events-auto px-3.5 py-2 glass-hud rounded-lg flex items-center gap-2 text-xs font-mono text-[#d4af37] border border-[#d4af37]/40 hover:bg-[#d4af37]/20 transition-all"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Return to 3D Spatial Walkthrough</span>

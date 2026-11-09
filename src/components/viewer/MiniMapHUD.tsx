@@ -22,7 +22,7 @@ export const MiniMapHUD: React.FC<MiniMapHUDProps> = ({ cameraCoords }) => {
 
   return (
     <div className="absolute top-20 left-5 z-20 font-mono text-xs select-none">
-      <div className="glass-panel p-3 rounded-lg border border-[#d4af37]/25 shadow-2xl flex flex-col gap-2 w-56">
+      <div className="glass-hud p-3 rounded-lg border border-[#d4af37]/25 shadow-2xl flex flex-col gap-2 w-56">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-white/10">
           <div className="flex items-center gap-1.5 text-[11px] text-[#d4af37] tracking-wider uppercase">

@@ -10,7 +10,7 @@ export const RoomSelectorDrawer: React.FC = () => {
   if (activeTool !== 'rooms') return null;
 
   return (
-    <div className="absolute top-20 right-5 z-40 w-80 max-h-[75vh] glass-modal rounded-xl border border-[#d4af37]/30 p-4 shadow-2xl flex flex-col overflow-hidden animate-fade-in font-mono text-xs">
+    <div className="absolute top-20 right-5 z-40 w-80 max-h-[75vh] glass-hud-modal rounded-xl border border-[#d4af37]/30 p-4 shadow-2xl flex flex-col overflow-hidden animate-fade-in font-mono text-xs">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <div className="flex items-center gap-2 text-[#d4af37] tracking-wider uppercase">

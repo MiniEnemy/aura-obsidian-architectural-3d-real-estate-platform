@@ -22,7 +22,7 @@ export const GuidedTourHUD: React.FC = () => {
 
   return (
     <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 w-full max-w-xl px-4 animate-fade-in font-mono select-none">
-      <div className="glass-modal rounded-xl border border-[#d4af37]/40 p-4 shadow-2xl flex flex-col gap-3">
+      <div className="glass-hud-modal rounded-xl border border-[#d4af37]/40 p-4 shadow-2xl flex flex-col gap-3">
         {/* Top bar with stop index */}
         <div className="flex items-center justify-between text-xs border-b border-white/10 pb-2">
           <div className="flex items-center gap-2 text-[#d4af37] tracking-wider uppercase font-semibold">

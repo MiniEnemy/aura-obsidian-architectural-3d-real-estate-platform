@@ -46,6 +46,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           alt={property.name}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-90 group-hover:opacity-100"
           loading="lazy"
+          decoding="async"
         />
 
         {/* Top Gradient Overlay */}

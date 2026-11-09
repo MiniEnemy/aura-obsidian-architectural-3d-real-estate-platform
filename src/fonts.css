@@ -1,0 +1,27 @@
+/* Self-hosted variable fonts (latin subset), replacing the render-blocking Google Fonts
+   stylesheet + its fonts.googleapis/gstatic round trips. One variable woff2 per family
+   covers the whole 300–700 weight range the UI uses; font-display: swap keeps text
+   visible while the file loads. Files live in public/fonts/ (served at /fonts/). */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/PlusJakartaSans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/GeistMono.woff2') format('woff2');
+}

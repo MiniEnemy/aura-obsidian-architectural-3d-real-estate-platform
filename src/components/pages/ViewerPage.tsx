@@ -78,14 +78,14 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ onBackToProperty }) => {
         <div className="flex items-center gap-3 pointer-events-auto">
           <button
             onClick={onBackToProperty}
-            className="p-2.5 rounded-lg glass-panel text-[#9eacb8] hover:text-[#d4af37] border border-[#d4af37]/30 transition-all flex items-center gap-2 text-xs shadow-xl"
+            className="p-2.5 rounded-lg glass-hud text-[#9eacb8] hover:text-[#d4af37] border border-[#d4af37]/30 transition-all flex items-center gap-2 text-xs shadow-xl"
             title="Exit 3D Viewport to Property Dossier"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">Exit 3D</span>
           </button>
 
-          <div className="glass-panel px-3.5 py-2 rounded-lg border border-white/10 shadow-xl flex items-center gap-2.5">
+          <div className="glass-hud px-3.5 py-2 rounded-lg border border-white/10 shadow-xl flex items-center gap-2.5">
             <div className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
             <div>
               <div className="text-xs text-[#f5f6f8] font-semibold">{activeProperty.name}</div>
@@ -112,7 +112,7 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ onBackToProperty }) => {
           {/* Room Labels Toggle */}
           <button
             onClick={() => setShowRoomLabels(!showRoomLabels)}
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg glass-panel border transition-all ${
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg glass-hud border transition-all ${
               showRoomLabels
                 ? 'border-[#d4af37]/40 text-[#d4af37]'
                 : 'border-white/10 text-[#9eacb8] opacity-60'
@@ -124,7 +124,7 @@ export const ViewerPage: React.FC<ViewerPageProps> = ({ onBackToProperty }) => {
           </button>
 
           {/* Quality Mode Switcher */}
-          <div className="glass-panel p-0.5 rounded-lg border border-white/10 flex items-center text-[10px]">
+          <div className="glass-hud p-0.5 rounded-lg border border-white/10 flex items-center text-[10px]">
             {(['high', 'medium', 'low'] as const).map((q) => (
               <button
                 key={q}

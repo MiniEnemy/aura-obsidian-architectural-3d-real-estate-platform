@@ -48,6 +48,8 @@ export const QuickCompareDrawer: React.FC<QuickCompareDrawerProps> = ({ onGoToCo
               <img
                 src={prop.images.hero}
                 alt={prop.name}
+                loading="lazy"
+                decoding="async"
                 className="w-10 h-10 rounded object-cover"
               />
               <div className="truncate max-w-[120px]">

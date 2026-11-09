@@ -43,7 +43,9 @@ export const HomePage: React.FC<HomePageProps> = ({
           <img
             src={flagship.images.hero}
             alt={flagship.name}
-            className="w-full h-full object-cover object-center filter brightness-[0.38] contrast-125 scale-105 animate-pulse-slow"
+            decoding="async"
+            fetchPriority="high"
+            className="w-full h-full object-cover object-center filter brightness-[0.38] contrast-125 scale-105"
           />
           {/* Obsidian Gradient Mask */}
           <div className="absolute inset-0 bg-gradient-to-t from-[#111317] via-[#111317]/60 to-[#111317]/80" />

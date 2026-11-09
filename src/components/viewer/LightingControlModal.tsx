@@ -46,7 +46,7 @@ export const LightingControlModal: React.FC = () => {
   ];
 
   return (
-    <div className="absolute top-20 right-5 z-40 w-84 glass-modal rounded-xl border border-[#d4af37]/30 p-4 shadow-2xl font-mono text-xs animate-fade-in">
+    <div className="absolute top-20 right-5 z-40 w-84 glass-hud-modal rounded-xl border border-[#d4af37]/30 p-4 shadow-2xl font-mono text-xs animate-fade-in">
       <div className="flex items-center justify-between pb-3 border-b border-white/10">
         <div className="flex items-center gap-2 text-[#d4af37] uppercase tracking-wider">
           <Sparkles className="w-3.5 h-3.5" />

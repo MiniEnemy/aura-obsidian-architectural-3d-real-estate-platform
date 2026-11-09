@@ -98,6 +98,8 @@ export const ContactAgentModal: React.FC = () => {
               <img
                 src={agent.avatarUrl}
                 alt={agent.name}
+                loading="lazy"
+                decoding="async"
                 className="w-12 h-12 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
               />
               <div>

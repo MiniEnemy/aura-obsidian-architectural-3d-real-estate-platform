@@ -13,12 +13,12 @@ export const FloorSelector: React.FC = () => {
 
   return (
     <div className="absolute top-20 right-5 z-20 flex flex-col items-end gap-1.5 font-mono text-xs select-none">
-      <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest text-[#9eacb8] uppercase glass-submerged rounded">
+      <div className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest text-[#9eacb8] uppercase glass-hud-submerged rounded">
         <Building2 className="w-3 h-3 text-[#d4af37]" />
         <span>Floor Plate</span>
       </div>
 
-      <div className="glass-panel p-1 rounded-lg flex flex-col gap-1 border border-[#d4af37]/20 shadow-xl">
+      <div className="glass-hud p-1 rounded-lg flex flex-col gap-1 border border-[#d4af37]/20 shadow-xl">
         {activeProperty.floors.map((fl) => {
           const isActive = currentFloorId === fl.id;
           return (
