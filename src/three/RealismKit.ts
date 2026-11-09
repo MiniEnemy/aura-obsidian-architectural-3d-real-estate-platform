@@ -28,9 +28,11 @@ export function detectQuality(renderer?: THREE.WebGLRenderer): Quality {
   return 'medium';
 }
 const Q = {
-  // 4096 was ~4x the fill cost of 2048 for texels (68 m frustum -> 3.3 cm/texel) that PCF-soft
-  // shadows blur away anyway; the periodic shadow refresh is one of the main frame-time spikes.
-  high:   { shadow: 2048, pixelRatio: 2,    ao: true,  aoSamples: 16 },
+  // 'high' keeps the delivered fidelity spec. The refresh spikes a 4096 map causes are absorbed
+  // by the governor's shadow-cadence shedding (every 10 -> 30 frames), not by shrinking the map:
+  // over the 68 m shadow frustum, 4096 gives ~1.7 cm/texel vs 3.4 cm at 2048, which is what keeps
+  // roofline and wall shadow edges crisp. Medium/low keep the cheaper values.
+  high:   { shadow: 4096, pixelRatio: 2,    ao: true,  aoSamples: 16 },
   medium: { shadow: 2048, pixelRatio: 1.5,  ao: false, aoSamples: 8 },
   low:    { shadow: 1024, pixelRatio: 1.25, ao: false, aoSamples: 0 }
 } as const;
@@ -201,9 +203,9 @@ export function createPostFX(
   const maxPR = Math.min(opts.maxPixelRatio ?? Infinity, Q[quality].pixelRatio);
   let pr = Math.min(window.devicePixelRatio, maxPR);
   let cssW = width, cssH = height;
-  // MSAA 4 on a half-float target roughly doubled scene-pass bandwidth for little visible gain
-  // (AO/denoise/grade already soften edges); 2 samples is the balance point at these resolutions.
-  const target = new THREE.WebGLRenderTarget(cssW * pr, cssH * pr, { type: THREE.HalfFloatType, samples: 2 });
+  // 4 MSAA samples on 'high' (delivered spec): rooflines and window mullions against the sky
+  // alias visibly at 2. Weaker tiers keep 2 — that cut is what made them smoother.
+  const target = new THREE.WebGLRenderTarget(cssW * pr, cssH * pr, { type: THREE.HalfFloatType, samples: quality === 'high' ? 4 : 2 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
@@ -249,7 +251,7 @@ export function createPostFX(
       if (gtao?.enabled) gtao.enabled = false;
       else if (bloomPass?.enabled) bloomPass.enabled = false;
       else if (shadowEvery < 30) shadowEvery = 30;
-      else if (pr > 0.6) { pr = Math.max(0.6, pr - 0.25); applyRes(); }
+      else if (pr > 0.7) { pr = Math.max(0.7, pr - 0.25); applyRes(); }
       cooldown = 30; ema = 20;
     } else if (ema < 11) {                            // lots of headroom: add quality back
       if (pr < bestPR()) { pr = Math.min(bestPR(), pr + 0.25); applyRes(); cooldown = 90; ema = 16; }

@@ -8,7 +8,13 @@ export type QualityTier = 'high' | 'medium' | 'low';
  * ViewerContext lives in the app-root bundle, and importing RealismKit here would pull
  * three.js out of the lazy ViewerPage chunk into the initial load.
  *
- * Without this, every device (including software renderers and phones) started at 'high'.
+ * Tiers: 'low' for phones and software rasterizers, 'medium' for known-weak integrated
+ * GPUs (their unsheddable costs — 4x MSAA, 4096 shadow map — would re-introduce drag the
+ * adaptive governor cannot remove), and 'high' for everything else. Unknown GPU strings
+ * (browsers that hide the renderer, uncommon hardware) default to 'high': defaulting them
+ * to 'medium' permanently taxed machines that could afford 'high' and made the viewer look
+ * soft. 'high' is a ceiling the governor retreats from at runtime if the machine cannot
+ * hold ~37 fps, so it is safe to start there.
  */
 export function detectInitialQuality(): QualityTier {
   if (typeof navigator === 'undefined') return 'medium';
@@ -21,8 +27,9 @@ export function detectInitialQuality(): QualityTier {
     gl?.getExtension('WEBGL_lose_context')?.loseContext();
     if (/swiftshader|llvmpipe|software|basic render/i.test(gpu)) return 'low';
     if (/RTX|GTX|GeForce|Radeon RX|Radeon Pro|Apple M[0-9]|Apple GPU|Arc/i.test(gpu)) return 'high';
-    return 'medium';
+    if (/UHD|Iris|HD Graphics|Radeon\(TM\) Vega|Radeon Vega|GeForce MX|Adreno|Mali/i.test(gpu)) return 'medium';
+    return 'high';
   } catch {
-    return 'medium';
+    return 'high';
   }
 }
