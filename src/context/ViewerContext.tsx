@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CameraMode, LightingMode, Vector3D } from '../types/property';
 import { ActiveMeasurement, ViewerTool } from '../types/viewer';
+import { detectInitialQuality } from '../utils/detectQuality';
 import { usePropertyContext } from './PropertyContext';
 
 interface ViewerContextType {
@@ -85,7 +86,9 @@ export const ViewerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [lightingMode, setLightingMode] = useState<LightingMode>('daytime');
   const [isFurnished, setIsFurnished] = useState<boolean>(true);
   const [activeTool, setActiveTool] = useState<ViewerTool>('none');
-  const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('high');
+  // Default from an actual GPU sniff (weak/software GPUs land on medium/low instead of
+  // always starting at 'high'); the viewer toolbar can still override it per session.
+  const [quality, setQuality] = useState<'high' | 'medium' | 'low'>(() => detectInitialQuality());
   const [showRoomLabels, setShowRoomLabels] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [is360Mode, setIs360Mode] = useState<boolean>(false);

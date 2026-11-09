@@ -28,7 +28,9 @@ export function detectQuality(renderer?: THREE.WebGLRenderer): Quality {
   return 'medium';
 }
 const Q = {
-  high:   { shadow: 4096, pixelRatio: 2,    ao: true,  aoSamples: 16 },
+  // 4096 was ~4x the fill cost of 2048 for texels (68 m frustum -> 3.3 cm/texel) that PCF-soft
+  // shadows blur away anyway; the periodic shadow refresh is one of the main frame-time spikes.
+  high:   { shadow: 2048, pixelRatio: 2,    ao: true,  aoSamples: 16 },
   medium: { shadow: 2048, pixelRatio: 1.5,  ao: false, aoSamples: 8 },
   low:    { shadow: 1024, pixelRatio: 1.25, ao: false, aoSamples: 0 }
 } as const;
@@ -199,18 +201,27 @@ export function createPostFX(
   const maxPR = Math.min(opts.maxPixelRatio ?? Infinity, Q[quality].pixelRatio);
   let pr = Math.min(window.devicePixelRatio, maxPR);
   let cssW = width, cssH = height;
-  const target = new THREE.WebGLRenderTarget(cssW * pr, cssH * pr, { type: THREE.HalfFloatType, samples: quality === 'high' ? 4 : 2 });
+  // MSAA 4 on a half-float target roughly doubled scene-pass bandwidth for little visible gain
+  // (AO/denoise/grade already soften edges); 2 samples is the balance point at these resolutions.
+  const target = new THREE.WebGLRenderTarget(cssW * pr, cssH * pr, { type: THREE.HalfFloatType, samples: 2 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
 
   let gtao: GTAOPass | undefined;
   if (wantAO && quality !== 'low') {
     gtao = new GTAOPass(scene, camera, cssW * pr, cssH * pr);
+    // AO runs at half resolution: the pass renders the whole scene a second time (normal/depth
+    // G-buffer) and then does AO + denoise + blend full-screen — at half res that is ~4x cheaper
+    // and AO is smooth, so the upscale is not visible. Wrapping setSize keeps every later
+    // composer.resize() path on the half-size buffers too.
+    const gtaoSetSize = gtao.setSize.bind(gtao);
+    gtao.setSize = (w: number, h: number) => { gtaoSetSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2))); };
     gtao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 1.4, thickness: 1.6, scale: 1.15, samples: Q[quality].aoSamples });
     gtao.enabled = Q[quality].ao; // medium/low start without AO; it is switched on if the GPU has headroom
     composer.addPass(gtao);
   }
-  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(cssW, cssH), 0.32, 0.55, 1.0));
+  let bloomPass: UnrealBloomPass | undefined;
+  if (bloom) { bloomPass = new UnrealBloomPass(new THREE.Vector2(cssW, cssH), 0.32, 0.55, 1.0); composer.addPass(bloomPass); }
   composer.addPass(new OutputPass());
   if (grade) composer.addPass(new ShaderPass(GradeShader));
 
@@ -221,18 +232,30 @@ export function createPostFX(
   };
   applyRes();
 
-  // ---- adaptive quality: watches real frame time, trades resolution/AO for smoothness ----
+  // ---- adaptive quality: watches real frame time, trades quality for smoothness ----
+  // Shed order (least to most visible): AO -> bloom -> shadow-refresh cadence -> resolution.
+  // Recovery restores in reverse. Shadow cadence matters because each refresh re-renders the
+  // whole scene into the shadow map — at a fixed every-10-frames it was a periodic hitch.
   let last = performance.now(), ema = 16, frame = 0, cooldown = 0, dirty = false;
+  let shadowEvery = 10;
+  const startedAt = performance.now();
+  const bestPR = () => Math.min(window.devicePixelRatio, maxPR);
   const step = () => {
     if (!adaptive) return;
-    if (frame < 45 || --cooldown > 0) return;
+    // Time-based (not frame-count) so a 10 fps machine is judged after ~1.2 s, not after
+    // 45 frames (4.5 s). The first second covers one-time shader compile spikes.
+    if (performance.now() - startedAt < 1200 || --cooldown > 0) return;
     if (ema > 27) {                                   // < ~37 fps: shed load
-      if (gtao?.enabled) { gtao.enabled = false; }
-      else if (pr > 0.7) { pr = Math.max(0.7, pr - 0.25); applyRes(); }
-      cooldown = 40; ema = 20;
+      if (gtao?.enabled) gtao.enabled = false;
+      else if (bloomPass?.enabled) bloomPass.enabled = false;
+      else if (shadowEvery < 30) shadowEvery = 30;
+      else if (pr > 0.6) { pr = Math.max(0.6, pr - 0.25); applyRes(); }
+      cooldown = 30; ema = 20;
     } else if (ema < 11) {                            // lots of headroom: add quality back
-      if (gtao && !gtao.enabled && quality !== 'low') { gtao.enabled = true; cooldown = 90; ema = 16; }
-      else if (pr < Math.min(window.devicePixelRatio, maxPR)) { pr = Math.min(Math.min(window.devicePixelRatio, maxPR), pr + 0.25); applyRes(); cooldown = 90; ema = 16; }
+      if (pr < bestPR()) { pr = Math.min(bestPR(), pr + 0.25); applyRes(); cooldown = 90; ema = 16; }
+      else if (shadowEvery > 10) { shadowEvery = 10; cooldown = 90; ema = 16; }
+      else if (bloomPass && !bloomPass.enabled) { bloomPass.enabled = true; cooldown = 90; ema = 16; }
+      else if (gtao && !gtao.enabled && quality !== 'low') { gtao.enabled = true; cooldown = 90; ema = 16; }
     }
   };
 
@@ -244,7 +267,7 @@ export function createPostFX(
       const dt = now - last; last = now;
       if (dt < 250) ema = ema * 0.92 + dt * 0.08;
       frame++;
-      if (dirty || frame % 10 === 0) { renderer.shadowMap.needsUpdate = true; dirty = false; }
+      if (dirty || frame % shadowEvery === 0) { renderer.shadowMap.needsUpdate = true; dirty = false; }
       step();
       composer.render();
     },

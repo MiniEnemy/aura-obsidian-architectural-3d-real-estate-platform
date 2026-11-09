@@ -152,12 +152,20 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
   const pointerRef = useRef({ down: false, moved: false, x: 0, y: 0, startX: 0, startY: 0 });
   const renderNeededRef = useRef(true);
   const animationUntilRef = useRef(0);
+  // Hover/cursor bookkeeping lives in refs: pointermove fires faster than animation frames (and
+  // faster than React should re-render), so at most one raycast runs per frame, deferred from
+  // the event itself, and cursor flips never touch React state.
+  const pendingHoverRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+  const hoveredNameRef = useRef<string | null>(null);
+  const cursorRef = useRef('grab');
+  const raycasterRef = useRef<THREE.Raycaster | null>(null);
+  const ndcRef = useRef<THREE.Vector2 | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState('Preparing the spatial viewport');
   const [hoveredName, setHoveredName] = useState<string | null>(null);
   const [webglError, setWebglError] = useState(false);
-  const [cursor, setCursor] = useState('grab');
   const [announcedRoom, setAnnouncedRoom] = useState('');
 
   useEffect(() => {
@@ -358,6 +366,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     document.addEventListener('visibilitychange', onVisibility);
     const timer = new THREE.Timer();
     let waterFrameElapsed = 0;
+    // ViewerPage feeds camera coords to the minimap HUD through React state. Signalling every
+    // rendered frame re-renders the whole viewer page at frame rate, which costs more CPU than
+    // the WebGL work on weaker machines; 10 Hz is plenty for a radar readout.
+    let lastCameraNotify = 0;
     const hasAnimatedWater = activeProperty.id === 'prop-obsidian-flagship' || activeProperty.id === 'prop-villa-solaria';
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
@@ -464,8 +476,19 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       // preparing off-thread, so the first real frame is held until warmup lands. Resolution and AO
       // shedding now live in RealismKit's adaptive step(), which runs from postFX.render().
       if (!warmupDone) return;
+      // At most one hover raycast per frame, from the latest pointer position (events can arrive
+      // several times per frame; doing the cast in the handler made pointer moves janky).
+      const pendingHover = pendingHoverRef.current;
+      if (pendingHover) {
+        pendingHoverRef.current = null;
+        applyHover(pendingHover.x, pendingHover.y);
+      }
       if (cameraModeRef.current !== 'orbit' || controlsChanged || cameraIsAnimated || renderNeededRef.current) {
-        onCameraMove?.(camera.position.x, camera.position.z, camera.rotation.y);
+        const nowMs = performance.now();
+        if (nowMs - lastCameraNotify >= 100) {
+          lastCameraNotify = nowMs;
+          onCameraMove?.(camera.position.x, camera.position.z, camera.rotation.y);
+        }
         MaterialsLibrary.update(timer.getElapsed());
         if (postFXRef.current) postFXRef.current.render();
         else renderer.render(scene, camera);
@@ -498,7 +521,10 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
       modelRootRef.current = null;
       skyRef.current = null;
     };
-  }, [activeProperty.id]);
+    // quality is a rebuild trigger: it feeds renderer setup, shadow-map size, MSAA samples and
+    // the AO/bloom passes at construction time, so toggling it in the toolbar must recreate
+    // the pipeline (the old effect only changed the pixel ratio, so "Low" barely helped).
+  }, [activeProperty.id, quality]);
 
   useEffect(() => {
     skyRef.current?.setPreset(toTimeOfDay(lightingMode), nodesRef.current?.interiorLights);
@@ -583,12 +609,13 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); };
   }, [clearMeasurements, isMeasuringActive, setCameraMode, setIsMeasuringActive]);
 
-  const getHit = (event: React.PointerEvent, includeSurfaces = false) => {
+  const getHit = (clientX: number, clientY: number, includeSurfaces = false) => {
     if (!cameraRef.current || !containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
-    const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, cameraRef.current);
+    const ndc = (ndcRef.current ??= new THREE.Vector2());
+    ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    const raycaster = (raycasterRef.current ??= new THREE.Raycaster());
+    raycaster.setFromCamera(ndc, cameraRef.current);
     if (!includeSurfaces) return raycaster.intersectObjects(nodesRef.current?.interactiveObjects ?? [], true)[0] ?? null;
     const surfaces: THREE.Object3D[] = [];
     sceneRef.current?.traverse((child) => {
@@ -596,33 +623,54 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     });
     return raycaster.intersectObjects(surfaces, true)[0] ?? null;
   };
+  // Runs once per animation frame with the freshest pointer position. Hover scale, tooltip and
+  // cursor are updated through refs/DOM so sweeping the mouse across furniture causes no React
+  // re-renders at all (the tooltip state only changes when the hovered name actually changes).
+  const applyHover = (clientX: number, clientY: number) => {
+    const hit = getHit(clientX, clientY);
+    const object = hit?.object ?? null;
+    if (hoveredRef.current && hoveredRef.current !== object) hoveredRef.current.scale.setScalar(1);
+    hoveredRef.current = object;
+    const name = (object?.userData?.name as string | undefined) ?? null;
+    if (object && name) object.scale.setScalar(1.035);
+    if (name !== hoveredNameRef.current) {
+      hoveredNameRef.current = name;
+      setHoveredName(name);
+    }
+    const nextCursor = name ? 'pointer' : pointerRef.current.down ? 'grabbing' : 'grab';
+    if (nextCursor !== cursorRef.current) {
+      cursorRef.current = nextCursor;
+      if (canvasRef.current) canvasRef.current.style.cursor = nextCursor;
+    }
+  };
   const onPointerDown = (event: React.PointerEvent) => { pointerRef.current = { down: true, moved: false, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY }; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId); if (cameraModeRef.current === 'first-person' && event.pointerType === 'mouse') (event.currentTarget as HTMLElement).requestPointerLock?.(); };
   const onPointerMove = (event: React.PointerEvent) => {
     const state = pointerRef.current;
     if (state.down && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) > 6) state.moved = true;
-    if (cameraModeRef.current !== 'orbit' && document.pointerLockElement === event.currentTarget) { fppRef.current.yaw -= event.movementX * 0.003; fppRef.current.pitch = THREE.MathUtils.clamp(fppRef.current.pitch - event.movementY * 0.003, -1.1, 1.1); }
+    const pointerLocked = cameraModeRef.current !== 'orbit' && document.pointerLockElement === event.currentTarget;
+    if (pointerLocked) { fppRef.current.yaw -= event.movementX * 0.003; fppRef.current.pitch = THREE.MathUtils.clamp(fppRef.current.pitch - event.movementY * 0.003, -1.1, 1.1); }
     else if (cameraModeRef.current !== 'orbit' && state.down && event.pointerType !== 'mouse') {
       fppRef.current.yaw -= (event.clientX - state.x) * 0.006;
       fppRef.current.pitch = THREE.MathUtils.clamp(fppRef.current.pitch - (event.clientY - state.y) * 0.006, -0.8, 0.8);
       state.x = event.clientX;
       state.y = event.clientY;
     }
-    const hit = getHit(event);
-    const object = hit?.object ?? null;
-    if (hoveredRef.current && hoveredRef.current !== object) hoveredRef.current.scale.setScalar(1);
-    hoveredRef.current = object;
-    if (object?.userData?.name) { object.scale.setScalar(1.035); setHoveredName(object.userData.name); setCursor('pointer'); } else { setHoveredName(null); setCursor(state.down ? 'grabbing' : 'grab'); }
+    lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    // No hover work while look-locked: the cursor is hidden and nothing can be pointed at.
+    if (!pointerLocked) pendingHoverRef.current = lastPointerRef.current;
   };
   const onPointerUp = (event: React.PointerEvent) => {
+    // Refresh hover once after release so the cursor leaves 'grabbing' without needing movement.
+    pendingHoverRef.current = { ...lastPointerRef.current };
     const wasDrag = pointerRef.current.moved;
     pointerRef.current.down = false;
     if (wasDrag) return;
     if (isMeasuringActive) {
-      const surfaceHit = getHit(event, true);
+      const surfaceHit = getHit(event.clientX, event.clientY, true);
       if (surfaceHit) addMeasurementPoint({ x: Number(surfaceHit.point.x.toFixed(2)), y: Number(surfaceHit.point.y.toFixed(2)), z: Number(surfaceHit.point.z.toFixed(2)) });
       return;
     }
-    const hit = getHit(event);
+    const hit = getHit(event.clientX, event.clientY);
     if (!hit) return;
     const data = hit.object.userData;
     if (!data?.id) return;
@@ -658,8 +706,8 @@ export const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ onCameraMove }) => {
     };
   };
 
-  return <div ref={containerRef} className="relative h-full w-full select-none overflow-hidden bg-[#121821]" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onDoubleClick={onDoubleClick} onPointerLeave={() => setHoveredName(null)}>
-    <canvas ref={canvasRef} aria-label="Interactive 3D property walkthrough" className="block h-full w-full touch-none" style={{ cursor }} />
+  return <div ref={containerRef} className="relative h-full w-full select-none overflow-hidden bg-[#121821]" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onDoubleClick={onDoubleClick} onPointerLeave={() => { pendingHoverRef.current = null; if (hoveredRef.current) { hoveredRef.current.scale.setScalar(1); hoveredRef.current = null; } hoveredNameRef.current = null; setHoveredName(null); }}>
+    <canvas ref={canvasRef} aria-label="Interactive 3D property walkthrough" className="block h-full w-full touch-none" style={{ cursor: 'grab' }} />
     {webglError && <div className="absolute inset-0 z-50 grid place-items-center bg-[#121821] p-6 text-center text-white"><div><h2 className="text-lg font-semibold">3D preview unavailable</h2><p className="mt-2 max-w-sm text-sm text-white/65">Your browser could not start WebGL, or the graphics context was interrupted. Reload the viewer to try again.</p></div></div>}
     {isLoading && !webglError && <div className="absolute inset-0 z-40 grid place-items-center bg-[#121821]/95 p-6 text-center text-white"><div className="w-full max-w-xs"><div className="mb-5 flex items-center justify-center gap-3"><Move3d className="h-5 w-5 text-[#d4af37]" /><span className="text-sm tracking-[0.18em] text-white/75">AURA / SPATIAL</span></div><div className="h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-[#d4af37] transition-[width] duration-300" style={{ width: `${loadingProgress}%` }} /></div><p className="mt-3 text-xs text-white/60" role="status">{loadingStatus} · {loadingProgress}%</p></div></div>}
     {hoveredName && !isMeasuringActive && <div className="pointer-events-none absolute left-1/2 top-6 z-20 flex -translate-x-1/2 items-center gap-2 rounded border border-[#d4af37]/40 bg-[#121821]/90 px-3 py-2 text-xs text-[#f5d878] shadow-xl"><MousePointer className="h-3.5 w-3.5" />{hoveredName}</div>}
